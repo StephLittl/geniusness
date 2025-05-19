@@ -1,0 +1,25 @@
+# === Global ignores ===
+.DS_Store
+.env
+.env.local
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# === Ignore node_modules in both frontend and backend ===
+client/node_modules/
+server/node_modules/
+
+# === Ignore build output ===
+client/dist/
+client/.vite/
+server/build/
+
+# === IDE settings ===
+.vscode/
+.idea/
+
+# === OS-specific ===
+Thumbs.db
