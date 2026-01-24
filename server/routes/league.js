@@ -167,7 +167,7 @@ module.exports = function (supabase) {
     const { error: joinErr } = await supabase
       .from('league_player')
       .upsert([{ leagueid: league.leagueid, userid: userId }], {
-        onConflict: 'leagueid,userid',
+        onConflict: ['leagueid', 'userid'],
       });
     if (joinErr) return res.status(400).json({ error: joinErr.message });
 

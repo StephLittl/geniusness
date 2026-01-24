@@ -13,7 +13,7 @@ module.exports = function (supabase) {
     const { data, error } = await supabase
       .from('scores')
       .upsert([{ user_id, league_id, game_id, date, score }], {
-        onConflict: 'user_id,league_id,game_id,date',
+        onConflict: ['user_id', 'league_id', 'game_id', 'date'],
       })
       .select();
 
