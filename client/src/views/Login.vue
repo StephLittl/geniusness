@@ -47,8 +47,19 @@ export default {
         this.store.setUser(res.data.user)
         this.store.setToken(res.data.access_token)
 
-        // Redirect to League page
-        this.router.push('/league')
+        // Check if user has selected games
+        try {
+          const gamesRes = await axios.get(`/api/user-games/${res.data.user.id}`)
+          const hasGames = gamesRes.data.games && gamesRes.data.games.length > 0
+          if (!hasGames) {
+            this.router.push('/games/select')
+          } else {
+            this.router.push('/league')
+          }
+        } catch {
+          // If check fails, go to league page anyway
+          this.router.push('/league')
+        }
       } catch (err) {
         console.error('Login failed:', err.response?.data || err)
         this.error = err.response?.data?.error || 'Login failed'

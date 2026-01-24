@@ -47,6 +47,14 @@ create table if not exists league_player (
   primary key (leagueid, userid)
 );
 
+-- User's selected daily games (which games they play)
+create table if not exists user_games (
+  user_id uuid references users(user_id) on delete cascade,
+  game_id uuid references games(gameid) on delete cascade,
+  created_at timestamptz default now(),
+  primary key (user_id, game_id)
+);
+
 -- Daily scores: one row per user per league per game per date
 create table if not exists scores (
   id uuid primary key default gen_random_uuid(),

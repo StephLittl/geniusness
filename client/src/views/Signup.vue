@@ -40,14 +40,18 @@ const error = ref(null)
 async function signup() {
   error.value = null
   try {
-    await axios.post('/api/auth/signup', {
+    const res = await axios.post('/api/auth/signup', {
       firstName: firstName.value,
       lastName: lastName.value,
       username: username.value,
       email: email.value,
       password: password.value
     })
-    router.push('/login')
+    // Store user temporarily for game selection
+    const { useUserStore } = await import('../store/userStore')
+    const store = useUserStore()
+    store.setUser({ id: res.data.user.id, email: res.data.user.email, username: username.value })
+    router.push('/games/select')
   } catch (err) {
     error.value = err.response?.data?.error || 'Signup failed'
   }

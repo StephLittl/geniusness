@@ -3,10 +3,12 @@
     <p v-if="loading" class="loading">Loading…</p>
     <template v-else-if="league">
       <header class="header">
-        <h1>{{ league.name }}</h1>
-        <p class="duration">
-          {{ league.end_date ? `${league.start_date || '—'} to ${league.end_date}` : 'Indefinite' }}
-        </p>
+        <div>
+          <h1>{{ league.name }}</h1>
+          <p class="duration">
+            {{ league.end_date ? `${league.start_date || '—'} to ${league.end_date}` : 'Indefinite' }}
+          </p>
+        </div>
         <div v-if="league.invite_code" class="invite">
           <label>Invite code</label>
           <div class="invite-row">
@@ -16,90 +18,59 @@
         </div>
       </header>
 
-      <section class="games">
-        <h2>Games</h2>
-        <p>{{ (league.games || []).map(g => g.name).join(', ') || '—' }}</p>
-      </section>
+      <!-- Score Grid -->
+      <section class="score-grid-section">
+        <div class="grid-header">
+          <h2>Score Grid</h2>
+          <div class="grid-controls">
+            <button type="button" @click="showAddScore = !showAddScore" class="btn">
+              {{ showAddScore ? 'Hide' : 'Add Score' }}
+            </button>
+          </div>
+        </div>
 
-      <section class="players">
-        <h2>Players</h2>
-        <ul>
-          <li v-for="p in (league.players || [])" :key="p.user_id">
-            {{ p.username || p.email || p.user_id }}
-          </li>
-        </ul>
-      </section>
-
-      <section class="add-score">
-        <h2>Add score</h2>
-        <form @submit.prevent="submitScore">
-          <div class="row">
-            <label>Game</label>
+        <div v-if="showAddScore" class="add-score-form">
+          <form @submit.prevent="submitScore">
             <select v-model="scoreForm.gameId" required>
-              <option value="">—</option>
-              <option v-for="g in (league.games || [])" :key="g.gameid" :value="g.gameid">{{ g.name }}</option>
+              <option value="">Select game</option>
+              <option v-for="g in (league.games || [])" :key="g.gameid" :value="g.gameid">
+                {{ g.name }}
+              </option>
             </select>
-          </div>
-          <div class="row">
-            <label>Date</label>
             <input v-model="scoreForm.date" type="date" required />
-          </div>
-          <div class="row">
-            <label>Score</label>
-            <input v-model.number="scoreForm.score" type="number" step="any" required />
-          </div>
-          <button type="submit" :disabled="scoreSubmitting">Save</button>
-        </form>
-        <p v-if="scoreError" class="error">{{ scoreError }}</p>
-      </section>
+            <input v-model.number="scoreForm.score" type="number" step="any" placeholder="Score" required />
+            <button type="submit" :disabled="scoreSubmitting">Save</button>
+          </form>
+          <p v-if="scoreError" class="error">{{ scoreError }}</p>
+        </div>
 
-      <section class="standings">
-        <h2>Standings</h2>
-        <p v-if="!scores.length">No scores yet.</p>
-        <template v-else>
-          <div v-for="game in league.games" :key="game.gameid" class="game-standings">
-            <h3>{{ game.name }}</h3>
-            <table>
+        <div v-if="!scores.length" class="empty">No scores yet. Add your first score above.</div>
+        <div v-else class="grid-container">
+          <div class="grid-wrapper">
+            <table class="score-grid">
               <thead>
                 <tr>
-                  <th>Player</th>
-                  <th>Avg</th>
-                  <th>Count</th>
+                  <th class="sticky-col">Player / Game</th>
+                  <th v-for="date in dateColumns" :key="date" class="date-col">
+                    {{ formatDate(date) }}
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in (standingsByGame[game.gameid] || [])" :key="row.userId">
-                  <td>{{ row.username }}</td>
-                  <td>{{ row.avg.toFixed(1) }}</td>
-                  <td>{{ row.count }}</td>
+                <tr v-for="row in gridRows" :key="row.key">
+                  <td class="sticky-col row-label">
+                    <strong>{{ row.playerName }}</strong><br />
+                    <span class="game-name">{{ row.gameName }}</span>
+                  </td>
+                  <td v-for="date in dateColumns" :key="date" class="score-cell">
+                    <span v-if="row.scores[date] !== undefined">{{ row.scores[date] }}</span>
+                    <span v-else class="empty-cell">—</span>
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </template>
-      </section>
-
-      <section class="recent">
-        <h2>Recent scores</h2>
-        <p v-if="!scores.length">No scores yet.</p>
-        <table v-else>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Game</th>
-              <th>Player</th>
-              <th>Score</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="s in scores.slice(0, 30)" :key="s.id">
-              <td>{{ s.date }}</td>
-              <td>{{ s.game?.name || '—' }}</td>
-              <td>{{ s.user?.username || '—' }}</td>
-              <td>{{ s.score }}</td>
-            </tr>
-          </tbody>
-        </table>
+        </div>
       </section>
 
       <p><router-link to="/league">← Back to leagues</router-link></p>
@@ -121,7 +92,8 @@ export default {
       loading: true,
       scoreForm: { gameId: '', date: '', score: '' },
       scoreSubmitting: false,
-      scoreError: null
+      scoreError: null,
+      showAddScore: false
     }
   },
   setup() {
@@ -130,32 +102,32 @@ export default {
     return { route, store }
   },
   computed: {
-    standingsByGame() {
-      const league = this.league
-      const scores = this.scores || []
-      if (!league?.games) return {}
-
-      const out = {}
-      for (const g of league.games) {
-        const byUser = {}
-        for (const s of scores) {
-          if (s.game_id !== g.gameid) continue
-          const uid = s.user_id
-          if (!byUser[uid]) byUser[uid] = { username: s.user?.username || '—', sum: 0, n: 0 }
-          byUser[uid].sum += Number(s.score)
-          byUser[uid].n += 1
+    dateColumns() {
+      if (!this.scores.length) return []
+      const dates = [...new Set(this.scores.map(s => s.date))].sort().reverse()
+      return dates
+    },
+    gridRows() {
+      if (!this.league?.games || !this.league?.players || !this.scores.length) return []
+      const rows = []
+      for (const player of this.league.players) {
+        for (const game of this.league.games) {
+          const key = `${player.user_id}-${game.gameid}`
+          const playerScores = {}
+          for (const score of this.scores) {
+            if (score.user_id === player.user_id && score.game_id === game.gameid) {
+              playerScores[score.date] = score.score
+            }
+          }
+          rows.push({
+            key,
+            playerName: player.username || player.email || '—',
+            gameName: game.name,
+            scores: playerScores
+          })
         }
-        const rows = Object.entries(byUser).map(([userId, x]) => ({
-          userId,
-          username: x.username,
-          avg: x.n ? x.sum / x.n : 0,
-          count: x.n
-        }))
-        const lower = (g.score_type || '').toLowerCase().includes('lower')
-        rows.sort((a, b) => (lower ? a.avg - b.avg : b.avg - a.avg))
-        out[g.gameid] = rows
       }
-      return out
+      return rows
     }
   },
   async created() {
@@ -183,6 +155,15 @@ export default {
     },
     async submitScore() {
       this.scoreError = null
+      if (!this.scoreForm.gameId || !this.scoreForm.date || this.scoreForm.score == null || this.scoreForm.score === '') {
+        this.scoreError = 'Please fill in all fields'
+        return
+      }
+      const scoreNum = Number(this.scoreForm.score)
+      if (isNaN(scoreNum)) {
+        this.scoreError = 'Score must be a valid number'
+        return
+      }
       this.scoreSubmitting = true
       try {
         await axios.post('/api/scores', {
@@ -190,13 +171,15 @@ export default {
           league_id: this.route.params.id,
           game_id: this.scoreForm.gameId,
           date: this.scoreForm.date,
-          score: this.scoreForm.score
+          score: scoreNum
         })
         await this.fetchScores()
         this.scoreForm.gameId = ''
         this.scoreForm.date = new Date().toISOString().slice(0, 10)
         this.scoreForm.score = ''
+        this.showAddScore = false
       } catch (err) {
+        console.error('Score save error:', err)
         this.scoreError = err.response?.data?.error || 'Failed to save score'
       } finally {
         this.scoreSubmitting = false
@@ -205,29 +188,155 @@ export default {
     copyInvite() {
       if (!this.league?.invite_code) return
       navigator.clipboard?.writeText(this.league.invite_code).catch(() => {})
+    },
+    formatDate(dateStr) {
+      const d = new Date(dateStr)
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     }
   }
 }
 </script>
 
 <style scoped>
-.league-view { max-width: 800px; margin: 0 auto; text-align: left; }
-.loading, .error { margin: 2rem 0; }
-.header { margin-bottom: 2rem; }
-.duration { color: var(--muted, #666); margin: 0.25rem 0; }
-.invite { margin-top: 1rem; }
-.invite label { display: block; margin-bottom: 0.25rem; font-weight: 500; }
-.invite-row { display: flex; align-items: center; gap: 0.5rem; }
-.invite-row code { padding: 0.35rem 0.5rem; background: #2a2a2a; border-radius: 6px; }
-.games, .players, .add-score, .standings, .recent { margin-bottom: 2rem; }
-.games ul, .players ul { list-style: none; padding: 0; margin: 0; }
-.players li { padding: 0.25rem 0; }
-.add-score .row { margin-bottom: 0.75rem; }
-.add-score label { display: block; margin-bottom: 0.25rem; }
-.add-score select, .add-score input { padding: 0.5rem; width: 100%; max-width: 240px; box-sizing: border-box; }
-.game-standings { margin-bottom: 1.5rem; }
-.game-standings h3 { font-size: 1rem; margin-bottom: 0.5rem; }
-table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #333; }
-th { font-weight: 500; }
+.league-view {
+  max-width: 100%;
+  margin: 0 auto;
+  text-align: left;
+}
+.loading,
+.error {
+  margin: 2rem 0;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.duration {
+  color: var(--muted, #666);
+  margin: 0.25rem 0;
+}
+.invite {
+  margin-top: 0.5rem;
+}
+.invite label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-weight: 500;
+}
+.invite-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.invite-row code {
+  padding: 0.35rem 0.5rem;
+  background: #2a2a2a;
+  border-radius: 6px;
+}
+.score-grid-section {
+  margin-bottom: 2rem;
+}
+.grid-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #444;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.add-score-form {
+  padding: 1rem;
+  background: #2a2a2a;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+.add-score-form form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.add-score-form select,
+.add-score-form input {
+  padding: 0.5rem;
+}
+.add-score-form input[type="number"] {
+  width: 100px;
+}
+.error {
+  color: #e74;
+  margin-top: 0.5rem;
+}
+.grid-container {
+  overflow-x: auto;
+  border: 1px solid #444;
+  border-radius: 8px;
+}
+.grid-wrapper {
+  min-width: 100%;
+  display: inline-block;
+}
+.score-grid {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 600px;
+}
+.score-grid th,
+.score-grid td {
+  padding: 0.75rem;
+  text-align: center;
+  border: 1px solid #333;
+}
+.score-grid th {
+  background: #2a2a2a;
+  font-weight: 500;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.sticky-col {
+  position: sticky;
+  left: 0;
+  background: #242424;
+  z-index: 2;
+  text-align: left;
+}
+.score-grid th.sticky-col {
+  z-index: 3;
+}
+.row-label {
+  min-width: 150px;
+  max-width: 200px;
+}
+.row-label strong {
+  display: block;
+}
+.game-name {
+  font-size: 0.85rem;
+  color: var(--muted, #666);
+}
+.date-col {
+  min-width: 80px;
+}
+.score-cell {
+  min-width: 60px;
+}
+.empty-cell {
+  color: var(--muted, #555);
+}
+.empty {
+  color: var(--muted, #666);
+  margin: 2rem 0;
+  text-align: center;
+}
 </style>

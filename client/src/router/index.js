@@ -11,6 +11,7 @@ const routes = [
   { path: '/', redirect: '/league' },
   { path: '/signup', component: Signup },
   { path: '/login', component: Login },
+  { path: '/games/select', component: () => import('../views/GameSelection.vue') },
   { path: '/league', component: League },
   { path: '/league/view/:id', component: LeagueView, name: 'league-view' },
   { path: '/league/join', component: LeagueJoin },
@@ -27,7 +28,7 @@ router.beforeEach((to, from, next) => {
   const store = useUserStore(); // Pinia/Vuex
   const loggedIn = !!store.user?.id;
 
-  if (to.path.startsWith('/league') && !loggedIn) {
+  if ((to.path.startsWith('/league') || to.path.startsWith('/games')) && !loggedIn) {
     next('/login');
   } else {
     next();

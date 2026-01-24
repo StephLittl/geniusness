@@ -30,3 +30,6 @@ app.listen(port, () => {
 
 const leagueRoutes = require('./routes/league');
 app.use('/api/league', leagueRoutes(supabase));
+
+const userGamesRoutes = require('./routes/userGames');
+app.use('/api/user-games', userGamesRoutes(supabase));
