@@ -3,8 +3,9 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const { createClient } = require('@supabase/supabase-js');
 const scoreRoutes = require('./routes/scores');
+const authRoutes = require('./routes/auth');
 
-dotenv.config();
+dotenv.config({ path: __dirname + '/.env' });
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -20,8 +21,12 @@ app.use(express.json());
 
 // Routes
 app.use('/api/scores', scoreRoutes(supabase));
+app.use('/api/auth', authRoutes(supabase));
 
 // Start server
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
+
+const leagueRoutes = require('./routes/league');
+app.use('/api/league', leagueRoutes(supabase));
