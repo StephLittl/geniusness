@@ -43,6 +43,12 @@ export default {
           password: this.password
         })
 
+        if (!res.data || !res.data.user || !res.data.access_token) {
+          console.error('Invalid response from server:', res.data)
+          this.error = 'Invalid response from server. Please try again.'
+          return
+        }
+
         // Save user info and token to Pinia store
         this.store.setUser(res.data.user)
         this.store.setToken(res.data.access_token)
@@ -56,13 +62,23 @@ export default {
           } else {
             this.router.push('/')
           }
-        } catch {
+        } catch (gamesErr) {
+          console.error('Error checking games:', gamesErr)
           // If check fails, go to home page anyway
           this.router.push('/')
         }
       } catch (err) {
-        console.error('Login failed:', err.response?.data || err)
-        this.error = err.response?.data?.error || 'Login failed'
+        console.error('Login failed:', err)
+        if (err.response) {
+          // Server responded with error
+          this.error = err.response.data?.error || `Login failed: ${err.response.status} ${err.response.statusText}`
+        } else if (err.request) {
+          // Request made but no response
+          this.error = 'Unable to connect to server. Please check if the server is running.'
+        } else {
+          // Error setting up request
+          this.error = err.message || 'Login failed. Please try again.'
+        }
       }
     }
   }

@@ -1,17 +1,13 @@
 <template>
   <div class="home-page">
     <div class="main-content">
-      <h1>Daily Scores</h1>
+      <h1 class="page-title">Daily Scores</h1>
       <p class="greeting">Hi, {{ user?.username || user?.email || 'there' }}.</p>
 
       <section v-if="loading" class="loading">Loading…</section>
       <template v-else>
         <!-- Daily Score Entry -->
         <section class="daily-scores">
-          <div class="section-header">
-            <h2>Enter Today's Scores</h2>
-          </div>
-          
           <div v-if="userGames.length === 0" class="empty">
             <p>No games selected. <router-link to="/games/select">Select your games</router-link></p>
           </div>
@@ -786,13 +782,23 @@ export default {
     },
     formatScoringInfo(info) {
       if (!info) return ''
+      let result = ''
       // If it's already a string, return it
-      if (typeof info === 'string') return info
-      // If it's an object, try to format it nicely
-      if (typeof info === 'object') {
-        return JSON.stringify(info, null, 2)
+      if (typeof info === 'string') {
+        result = info
+      } else if (typeof info === 'object') {
+        // If it's an object, try to format it nicely
+        result = JSON.stringify(info, null, 2)
+      } else {
+        result = String(info)
       }
-      return String(info)
+      // Remove "higher is better" and "lower is better" phrases (case insensitive)
+      result = result.replace(/\s*\(?\s*(higher|lower)\s+is\s+better\s*\)?\s*/gi, '')
+      result = result.replace(/\s*\(?\s*(higher|lower)\s+is\s+better\s*\)?\s*/gi, '') // Run twice to catch variations
+      // Clean up any double spaces or trailing/leading punctuation
+      result = result.replace(/\s{2,}/g, ' ').trim()
+      result = result.replace(/^[.,;:\s]+|[.,;:\s]+$/g, '')
+      return result
     }
   }
 }
@@ -804,22 +810,30 @@ export default {
   grid-template-columns: 1fr 300px;
   gap: 2rem;
   align-items: start;
+  width: calc(100% + 4rem);
+  margin: -2rem 0 -2rem -2rem;
+  padding: 2rem;
 }
 .main-content {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+.page-title {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
 }
 .greeting {
-  margin: -0.5rem 0 1.5rem;
+  margin: 0 0 1rem;
   color: #666;
+  font-size: 0.9rem;
 }
 .daily-scores {
   margin-bottom: 2rem;
-}
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
 }
 .btn {
   padding: 0.5rem 1rem;
@@ -838,6 +852,11 @@ export default {
   grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
   align-items: start;
+  justify-items: start;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 @media (max-width: 1200px) {
@@ -858,13 +877,16 @@ export default {
   border-radius: 8px;
   background: white;
   box-sizing: border-box;
-  overflow: visible;
+  overflow: hidden;
   position: relative;
+  width: 100%;
+  max-width: 100%;
   height: 160px;
   max-height: 160px;
   min-height: 160px;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 .entry-form .input-row,
 .entry-form .paste-row {
@@ -883,20 +905,18 @@ export default {
   display: flex;
   align-items: center;
 }
-.info-tooltip {
-  display: inline-flex;
-  align-items: center;
-  vertical-align: middle;
-  flex-shrink: 0;
-}
 .entry-form {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  height: calc(160px - 2rem - 0.75rem);
+  min-height: calc(160px - 2rem - 0.75rem);
   max-height: calc(160px - 2rem - 0.75rem);
   gap: 0;
-  overflow: visible;
+  overflow: hidden;
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 .entry-form > .entry-mode-toggle {
   margin-bottom: 0.5rem;
@@ -917,6 +937,9 @@ export default {
   max-height: 36px;
   flex-shrink: 0;
 }
+.entry-form:not(:has(.entry-mode-toggle)) > .input-row:has(.time-inputs) {
+  margin: 2rem 0 0 0 !important;
+}
 .entry-form label {
   font-weight: 500;
   color: #2d5a3d;
@@ -924,12 +947,14 @@ export default {
 }
 .info-tooltip {
   position: relative;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  flex-shrink: 0;
+  z-index: 10001;
 }
 .info-icon {
   cursor: help;
-  font-size: 1rem;
-  opacity: 0.7;
   width: 16px;
   height: 16px;
   display: inline-flex;
@@ -941,6 +966,7 @@ export default {
   font-size: 0.75rem;
   font-weight: bold;
   font-style: normal;
+  opacity: 0.7;
 }
 .info-icon:hover {
   opacity: 1;
@@ -949,19 +975,23 @@ export default {
 .tooltip-content {
   visibility: hidden;
   position: absolute;
-  bottom: 125%;
-  left: 0;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
   background: #2d5a3d;
   color: white;
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
   font-size: 0.75rem;
   white-space: normal;
-  width: 220px;
-  z-index: 1000;
+  width: max-content;
+  max-width: 300px;
+  min-width: 50px;
+  z-index: 10000;
   pointer-events: none;
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
   line-height: 1.4;
+  word-wrap: break-word;
 }
 .tooltip-content::after {
   content: '';
@@ -984,6 +1014,11 @@ export default {
   overflow: hidden;
   align-items: stretch;
   flex-shrink: 0;
+  padding: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 .entry-mode-toggle button {
   flex: 1;
@@ -998,10 +1033,34 @@ export default {
   align-items: center;
   justify-content: center;
   height: 100%;
+  min-height: 100%;
+  border-radius: 0;
+  box-sizing: border-box;
+  position: relative;
+}
+.entry-mode-toggle button:first-child {
+  border-radius: 4px 0 0 4px;
+}
+.entry-mode-toggle button:last-child {
+  border-radius: 0 4px 4px 0;
 }
 .entry-mode-toggle button.active {
   background: #2d5a3d;
   color: white;
+  border-radius: 0;
+  margin: -1px 0;
+  height: calc(100% + 2px);
+  min-height: calc(100% + 2px);
+}
+.entry-mode-toggle button.active:first-child {
+  border-radius: 4px 0 0 4px;
+  margin-left: -1px;
+  margin-right: 0;
+}
+.entry-mode-toggle button.active:last-child {
+  border-radius: 0 4px 4px 0;
+  margin-right: -1px;
+  margin-left: 0;
 }
 .entry-mode-toggle button:hover:not(.active) {
   background: #f0f8f0;
@@ -1031,15 +1090,18 @@ export default {
   height: 36px !important;
   min-height: 36px !important;
   max-height: 36px !important;
-  line-height: 1.2 !important;
+  line-height: 1.4 !important;
   overflow: hidden !important;
   box-sizing: border-box !important;
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
+  max-width: 100%;
+  width: 0;
   margin: 0 !important;
   display: block;
-  color: inherit !important;
-  flex-shrink: 0;
+  color: #2d5a3d !important;
+  flex-shrink: 1;
+  vertical-align: middle !important;
 }
 .paste-row button {
   flex-shrink: 0;
@@ -1052,15 +1114,6 @@ export default {
   border-radius: 4px;
   cursor: pointer;
   box-sizing: border-box;
-}
-.paste-row button {
-  align-self: flex-start;
-  padding: 0.5rem 1rem;
-  background: #2d5a3d;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
 }
 .paste-row button:hover {
   background: #1e3d28;
@@ -1076,6 +1129,8 @@ export default {
   gap: 0.5rem;
   align-items: center;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   height: 36px;
   max-height: 36px;
   min-height: 36px;
@@ -1083,6 +1138,15 @@ export default {
   padding: 0;
   position: relative;
   flex-shrink: 0;
+  box-sizing: border-box;
+}
+.input-row:has(.time-inputs) {
+  gap: 0.25rem;
+}
+.input-row > button,
+.paste-row > button {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 .input-row .keyword-inputs {
   flex-direction: column;
@@ -1103,15 +1167,14 @@ export default {
   margin-top: 0;
 }
 .input-row input:not(.time-input),
-.input-row .time-inputs,
 .input-row .keyword-inputs,
 .input-row select {
   flex: 1;
   min-width: 0;
 }
-.input-row > button {
-  flex-shrink: 0;
-  margin-left: auto;
+.input-row .time-inputs {
+  flex: 0 0 auto;
+  min-width: 0;
 }
 .time-inputs {
   display: flex;
@@ -1120,6 +1183,16 @@ export default {
 }
 .time-input {
   width: 60px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #4a7c59;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  box-sizing: border-box;
+  font-family: inherit;
 }
 .keyword-inputs {
   display: flex;
@@ -1129,21 +1202,44 @@ export default {
 }
 .keyword-inputs input {
   width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #4a7c59;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  box-sizing: border-box;
+  font-family: inherit;
 }
-.spelling-bee-select {
-  padding: 0.5rem;
+.spelling-bee-select,
+.connections-select,
+.wordle-select {
+  padding: 0.4rem 0.5rem;
   border: 1px solid #4a7c59;
   border-radius: 4px;
   background: white;
   color: #2d5a3d;
   font-size: 0.9rem;
-  min-width: 150px;
-}
-.input-row input {
-  padding: 0.5rem;
+  line-height: 1.4;
+  height: 36px;
+  box-sizing: border-box;
+  font-family: inherit;
+  min-width: 0;
   flex: 1;
+}
+.input-row input:not(.time-input) {
+  padding: 0.4rem 0.5rem;
+  flex: 1;
+  min-width: 0;
   border: 1px solid #4a7c59;
   border-radius: 4px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  height: 36px;
+  box-sizing: border-box;
+  font-family: inherit;
 }
 .input-row input.no-spinner::-webkit-inner-spin-button,
 .input-row input.no-spinner::-webkit-outer-spin-button {
@@ -1152,10 +1248,6 @@ export default {
 }
 .input-row input.no-spinner {
   -moz-appearance: textfield;
-}
-.input-row > button,
-.paste-row > button {
-  margin-left: auto;
 }
 .input-row button {
   padding: 0.4rem 1rem;
@@ -1193,6 +1285,10 @@ export default {
   font-size: 0.9rem;
   visibility: visible !important;
   opacity: 1 !important;
+  flex-shrink: 0;
+  height: auto;
+  min-height: 0;
+  max-height: none;
 }
 .current-score-display .score-row {
   display: flex;
@@ -1258,18 +1354,6 @@ export default {
 .cancel-btn-top:hover {
   background: #f0f0f0;
   color: #333;
-}
-.connections-select,
-.wordle-select {
-  padding: 0.5rem;
-  border: 1px solid #4a7c59;
-  border-radius: 4px;
-  background: white;
-  color: #2d5a3d;
-  font-size: 0.9rem;
-  min-width: 150px;
-  flex: 1;
-  min-width: 0;
 }
 .leagues-sidebar {
   background: #f0f8f0;
