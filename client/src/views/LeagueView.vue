@@ -132,7 +132,7 @@ export default {
     }
   },
   async created() {
-    this.scoreForm.date = new Date().toISOString().slice(0, 10)
+    this.scoreForm.date = this.getEasternDate()
     await this.fetchLeague()
     await this.fetchScores()
     this.loading = false
@@ -176,7 +176,7 @@ export default {
         })
         await this.fetchScores()
         this.scoreForm.gameId = ''
-        this.scoreForm.date = new Date().toISOString().slice(0, 10)
+        this.scoreForm.date = this.getEasternDate()
         this.scoreForm.score = ''
         this.showAddScore = false
       } catch (err) {
@@ -191,8 +191,20 @@ export default {
       navigator.clipboard?.writeText(this.league.invite_code).catch(() => {})
     },
     formatDate(dateStr) {
-      const d = new Date(dateStr)
+      // Parse date string (YYYY-MM-DD) as local date, not UTC
+      const [year, month, day] = dateStr.split('-').map(Number)
+      const d = new Date(year, month - 1, day)
       return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    },
+    getEasternDate() {
+      const now = new Date();
+      // Convert to Eastern time (handles DST automatically)
+      const easternDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      // Format as YYYY-MM-DD
+      const year = easternDate.getFullYear();
+      const month = String(easternDate.getMonth() + 1).padStart(2, '0');
+      const day = String(easternDate.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
     }
   }
 }
