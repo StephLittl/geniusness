@@ -11,7 +11,7 @@ module.exports = function (supabase) {
   });
 
   router.post('/create', async (req, res) => {
-    const { name, gameIds, userId, startDate, endDate } = req.body;
+    const { name, gameIds, userId, startDate, endDate, durationType, isRepeating } = req.body;
 
     if (!name || !gameIds || gameIds.length === 0 || !userId) {
       return res.status(400).json({ error: 'Missing league name, games, or user' });
@@ -38,6 +38,8 @@ module.exports = function (supabase) {
         name,
         invite_code: inviteCode,
         created_by: userId,
+        duration_type: durationType || 'indefinite',
+        is_repeating: isRepeating || false,
       };
       if (startDate) leaguePayload.start_date = startDate;
       if (endDate) leaguePayload.end_date = endDate;

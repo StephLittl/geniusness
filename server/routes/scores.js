@@ -3,6 +3,74 @@ const express = require('express');
 module.exports = function (supabase) {
   const router = express.Router();
 
+  router.post('/daily', async (req, res) => {
+    const { user_id, game_id, date, score } = req.body;
+
+    if (!user_id || !game_id || !date || score == null) {
+      return res.status(400).json({ error: 'Missing user_id, game_id, date, or score' });
+    }
+
+    // Convert score to number if it's a string
+    const scoreNum = typeof score === 'string' ? parseFloat(score) : Number(score);
+    if (isNaN(scoreNum)) {
+      return res.status(400).json({ error: 'Score must be a valid number' });
+    }
+
+    console.log('Saving daily score:', { user_id, game_id, date, score: scoreNum });
+
+    // Find all leagues the user is in that include this game
+    const { data: memberships } = await supabase
+      .from('league_player')
+      .select('leagueid')
+      .eq('userid', user_id);
+    
+    if (!memberships || memberships.length === 0) {
+      return res.status(400).json({ error: 'You are not in any leagues' });
+    }
+
+    const leagueIds = memberships.map(m => m.leagueid);
+    
+    // Find which leagues include this game
+    const { data: leagueGames } = await supabase
+      .from('league_game')
+      .select('leagueid')
+      .in('leagueid', leagueIds)
+      .eq('gameid', game_id);
+    
+    if (!leagueGames || leagueGames.length === 0) {
+      return res.status(400).json({ error: 'This game is not part of any of your leagues' });
+    }
+
+    const relevantLeagueIds = leagueGames.map(lg => lg.leagueid);
+
+    // Save score to all relevant leagues
+    const scoreRows = relevantLeagueIds.map(league_id => ({
+      user_id,
+      league_id,
+      game_id,
+      date,
+      score: scoreNum
+    }));
+
+    const { data, error } = await supabase
+      .from('scores')
+      .upsert(scoreRows, {
+        onConflict: ['user_id', 'league_id', 'game_id', 'date'],
+      })
+      .select();
+
+    if (error) {
+      console.error('Daily score save error:', error);
+      return res.status(400).json({ error: error.message });
+    }
+    
+    console.log('Daily score saved to leagues:', relevantLeagueIds);
+    res.status(201).json({ 
+      scores: data || [],
+      leagues: relevantLeagueIds 
+    });
+  });
+
   router.post('/', async (req, res) => {
     const { user_id, league_id, game_id, date, score } = req.body;
 

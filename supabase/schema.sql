@@ -17,6 +17,17 @@ create table if not exists games (
   name text not null,
   slug text unique not null,
   score_type text not null check (score_type in ('lower_better', 'higher_better')),
+  color text,
+  scoring_info text,
+  created_at timestamptz default now()
+);
+
+-- Share link parsing rules for games
+create table if not exists game_share_parsers (
+  game_id uuid primary key references games(gameid) on delete cascade,
+  pattern_type text not null, -- 'regex', 'json', 'url_param', etc.
+  pattern text not null, -- regex pattern, JSON path, etc.
+  score_path text, -- where to extract score from (for JSON, regex groups, etc.)
   created_at timestamptz default now()
 );
 
@@ -27,6 +38,8 @@ create table if not exists league (
   invite_code text unique,
   start_date date default current_date,
   end_date date,
+  duration_type text not null default 'indefinite' check (duration_type in ('weekly', 'monthly', 'yearly', 'indefinite', 'specific')),
+  is_repeating boolean default false,
   created_by uuid references users(user_id) on delete set null,
   created_at timestamptz default now(),
   constraint valid_dates check (end_date is null or end_date >= start_date)
@@ -75,10 +88,21 @@ create index if not exists idx_league_invite on league(invite_code);
 create index if not exists idx_league_player_user on league_player(userid);
 
 -- Seed default games (run separately if you prefer)
-insert into games (name, slug, score_type) values
-  ('Wordle', 'wordle', 'lower_better'),
-  ('Connections', 'connections', 'lower_better'),
-  ('Strands', 'strands', 'lower_better'),
-  ('Mini Crossword', 'mini-crossword', 'lower_better'),
-  ('Spelling Bee', 'spelling-bee', 'higher_better')
+insert into games (name, slug, score_type, color, scoring_info) values
+  ('Wordle', 'wordle', 'lower_better', '#6aaa64', 'Number of guesses (1-6). Lower is better.'),
+  ('Connections', 'connections', 'lower_better', '#9334e6', 'Number of errors. Lower is better.'),
+  ('Strands', 'strands', 'lower_better', '#f7da21', 'Number of words found. Lower is better.'),
+  ('Mini Crossword', 'mini-crossword', 'lower_better', '#000000', 'Time in seconds. Lower is better.'),
+  ('Spelling Bee', 'spelling-bee', 'higher_better', '#ffc700', 'Total points. Higher is better.')
 on conflict (slug) do nothing;
+
+-- Add share link parsers (examples - adjust patterns as needed)
+insert into game_share_parsers (game_id, pattern_type, pattern, score_path)
+select gameid, 'regex', 'Wordle \d+ (\d)/6', '1'
+from games where slug = 'wordle'
+on conflict do nothing;
+
+insert into game_share_parsers (game_id, pattern_type, pattern, score_path)
+select gameid, 'regex', 'Connections\nPuzzle #\d+\n(\d)/4', '1'
+from games where slug = 'connections'
+on conflict do nothing;

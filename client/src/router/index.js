@@ -1,22 +1,25 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Signup from '../views/Signup.vue'
 import Login from '../views/Login.vue'
-import League from '../views/League.vue'
+import Home from '../views/Home.vue'
+import Leagues from '../views/Leagues.vue'
 import LeagueView from '../views/LeagueView.vue'
 import LeagueJoin from '../views/LeagueJoin.vue'
 import LeagueStart from '../views/LeagueCreate.vue'
+import Stats from '../views/Stats.vue'
 import { useUserStore } from '../store/userStore'
 
 const routes = [
-  { path: '/', redirect: '/league' },
+  { path: '/', component: Home },
   { path: '/signup', component: Signup },
   { path: '/login', component: Login },
   { path: '/games/select', component: () => import('../views/GameSelection.vue') },
-  { path: '/league', component: League },
-  { path: '/league/view/:id', component: LeagueView, name: 'league-view' },
-  { path: '/league/join', component: LeagueJoin },
-  { path: '/league/create', component: LeagueStart },
-  { path: '/league/stats', component: () => import('../views/Stats.vue') }
+  { path: '/games/manage', component: () => import('../views/ManageGames.vue') },
+  { path: '/leagues', component: Leagues },
+  { path: '/leagues/:id', component: LeagueView, name: 'league-view' },
+  { path: '/leagues/join', component: LeagueJoin },
+  { path: '/leagues/create', component: LeagueStart },
+  { path: '/stats', component: Stats }
 ]
 
 const router = createRouter({
@@ -25,10 +28,10 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  const store = useUserStore(); // Pinia/Vuex
+  const store = useUserStore();
   const loggedIn = !!store.user?.id;
 
-  if ((to.path.startsWith('/league') || to.path.startsWith('/games')) && !loggedIn) {
+  if ((to.path.startsWith('/leagues') || to.path.startsWith('/games') || to.path === '/' || to.path === '/stats') && !loggedIn) {
     next('/login');
   } else {
     next();

@@ -15,7 +15,7 @@
       <button type="submit" :disabled="joining">Join</button>
     </form>
     <p v-if="error" class="error">{{ error }}</p>
-    <p><router-link to="/league">← Back to leagues</router-link></p>
+    <p><router-link to="/leagues">← Back to leagues</router-link></p>
   </div>
 </template>
 
@@ -47,7 +47,7 @@ export default {
           userId: this.store.user.id,
           inviteCode: code
         })
-        this.router.push(`/league/view/${res.data.leagueId}`)
+        this.router.push(`/leagues/${res.data.leagueId}`)
       } catch (err) {
         this.error = err.response?.data?.error || 'Could not join (invalid or expired code)'
       } finally {

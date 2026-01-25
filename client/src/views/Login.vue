@@ -54,11 +54,11 @@ export default {
           if (!hasGames) {
             this.router.push('/games/select')
           } else {
-            this.router.push('/league')
+            this.router.push('/')
           }
         } catch {
-          // If check fails, go to league page anyway
-          this.router.push('/league')
+          // If check fails, go to home page anyway
+          this.router.push('/')
         }
       } catch (err) {
         console.error('Login failed:', err.response?.data || err)

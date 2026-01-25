@@ -50,7 +50,7 @@ async function saveGames() {
     await axios.post(`/api/user-games/${store.user.id}`, {
       gameIds: selectedGames.value
     })
-    router.push('/league')
+    router.push('/')
   } catch (err) {
     error.value = err.response?.data?.error || 'Failed to save games'
   } finally {

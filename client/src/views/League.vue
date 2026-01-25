@@ -42,44 +42,37 @@
             <div v-if="!todayScoresByGame[game.gameid]" class="entry-form">
               <label>{{ game.name }}</label>
               <div class="input-row">
-                <select v-model="scoreForms[game.gameid].leagueId" required>
-                  <option value="">Select league</option>
-                  <option v-for="l in leagues" :key="l.leagueid" :value="l.leagueid">
-                    {{ l.name }}
-                  </option>
-                </select>
                 <input
                   v-model.number="scoreForms[game.gameid].score"
                   type="number"
                   step="any"
-                  placeholder="Score"
+                  placeholder="Enter score"
                   required
                 />
                 <button
                   type="button"
                   @click="submitScore(game.gameid)"
-                  :disabled="!scoreForms[game.gameid].leagueId || scoreForms[game.gameid].score == null"
+                  :disabled="scoreForms[game.gameid].score == null || scoreForms[game.gameid].score === ''"
                 >
                   Save
                 </button>
               </div>
+              <p class="hint-small">Will be saved to all leagues that include {{ game.name }}</p>
             </div>
             <div v-else class="entered-score">
               <div class="score-info">
                 <strong>{{ game.name }}</strong>
                 <span class="score-value">{{ todayScoresByGame[game.gameid].score }}</span>
-                <span class="league-name">{{ todayScoresByGame[game.gameid].league?.name }}</span>
+                <div class="league-names">
+                  <span v-for="leagueName in getLeagueNamesForGame(game.gameid)" :key="leagueName" class="league-tag">
+                    {{ leagueName }}
+                  </span>
+                </div>
               </div>
               <button type="button" @click="showReenter(game.gameid)" class="reenter-btn">
                 Re-enter
               </button>
               <div v-if="reenteringGame === game.gameid" class="reenter-form">
-                <select v-model="reenterForm.leagueId" required>
-                  <option value="">Select league</option>
-                  <option v-for="l in leagues" :key="l.leagueid" :value="l.leagueid">
-                    {{ l.name }}
-                  </option>
-                </select>
                 <input
                   v-model.number="reenterForm.score"
                   type="number"
@@ -156,7 +149,7 @@ export default {
       loading: true,
       scoreForms: {},
       reenteringGame: null,
-      reenterForm: { leagueId: '', score: '' },
+      reenterForm: { score: '' },
       leagueStandings: {},
       showManageGames: false
     }
@@ -170,7 +163,17 @@ export default {
     todayScoresByGame() {
       const map = {}
       for (const s of this.todayScores) {
-        map[s.game_id] = s
+        // If we already have this game, just add the league info
+        if (map[s.game_id]) {
+          if (!map[s.game_id].leagues) {
+            map[s.game_id].leagues = [map[s.game_id].league]
+          }
+          if (s.league && !map[s.game_id].leagues.some(l => l?.name === s.league?.name)) {
+            map[s.game_id].leagues.push(s.league)
+          }
+        } else {
+          map[s.game_id] = { ...s, leagues: s.league ? [s.league] : [] }
+        }
       }
       return map
     }
@@ -213,9 +216,21 @@ export default {
     initScoreForms() {
       const forms = {}
       for (const game of this.userGames) {
-        forms[game.gameid] = { leagueId: '', score: '' }
+        forms[game.gameid] = { score: '' }
       }
       this.scoreForms = forms
+    },
+    getLeagueNamesForGame(gameId) {
+      const scoreData = this.todayScoresByGame[gameId]
+      if (!scoreData) return []
+      // Use leagues from the score data if available, otherwise find from leagues list
+      if (scoreData.leagues && scoreData.leagues.length > 0) {
+        return scoreData.leagues.map(l => l?.name || l).filter(Boolean)
+      }
+      // Fallback: get all leagues that include this game
+      return this.leagues
+        .filter(l => l.games?.some(g => g.gameid === gameId))
+        .map(l => l.name)
     },
     async loadStandings() {
       const standings = {}
@@ -257,8 +272,8 @@ export default {
     },
     async submitScore(gameId) {
       const form = this.scoreForms[gameId]
-      if (!form.leagueId || form.score == null || form.score === '') {
-        alert('Please select a league and enter a score')
+      if (form.score == null || form.score === '') {
+        alert('Please enter a score')
         return
       }
       try {
@@ -268,15 +283,14 @@ export default {
           alert('Score must be a valid number')
           return
         }
-        await axios.post('/api/scores', {
+        const res = await axios.post('/api/scores/daily', {
           user_id: this.store.user.id,
-          league_id: form.leagueId,
           game_id: gameId,
           date: today,
           score: scoreNum
         })
         // Clear the form for this game
-        this.scoreForms[gameId] = { leagueId: '', score: '' }
+        this.scoreForms[gameId] = { score: '' }
         await this.loadData()
       } catch (err) {
         console.error('Score save error:', err)
@@ -287,17 +301,16 @@ export default {
       const existing = this.todayScoresByGame[gameId]
       this.reenteringGame = gameId
       this.reenterForm = {
-        leagueId: existing?.league_id || '',
         score: existing?.score || ''
       }
     },
     cancelReenter() {
       this.reenteringGame = null
-      this.reenterForm = { leagueId: '', score: '' }
+      this.reenterForm = { score: '' }
     },
     async updateScore(gameId) {
-      if (!this.reenterForm.leagueId || this.reenterForm.score == null || this.reenterForm.score === '') {
-        alert('Please select a league and enter a score')
+      if (this.reenterForm.score == null || this.reenterForm.score === '') {
+        alert('Please enter a score')
         return
       }
       try {
@@ -307,9 +320,8 @@ export default {
           alert('Score must be a valid number')
           return
         }
-        await axios.post('/api/scores', {
+        await axios.post('/api/scores/daily', {
           user_id: this.store.user.id,
-          league_id: this.reenterForm.leagueId,
           game_id: gameId,
           date: today,
           score: scoreNum
@@ -386,10 +398,15 @@ export default {
   gap: 0.5rem;
   align-items: center;
 }
-.input-row select,
 .input-row input {
   padding: 0.5rem;
   flex: 1;
+}
+.hint-small {
+  font-size: 0.85rem;
+  color: var(--muted, #666);
+  margin-top: 0.5rem;
+  margin-bottom: 0;
 }
 .entered-score {
   display: flex;
@@ -398,15 +415,28 @@ export default {
 }
 .score-info {
   display: flex;
-  gap: 1rem;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+.score-info strong {
+  display: block;
 }
 .score-value {
   font-size: 1.25rem;
   font-weight: bold;
 }
-.league-name {
-  color: var(--muted, #666);
+.league-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.league-tag {
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+  background: #2a2a2a;
+  border-radius: 4px;
+  color: var(--muted, #888);
 }
 .reenter-btn {
   padding: 0.4rem 0.75rem;
@@ -417,7 +447,6 @@ export default {
   display: flex;
   gap: 0.5rem;
 }
-.reenter-form select,
 .reenter-form input {
   padding: 0.5rem;
   flex: 1;

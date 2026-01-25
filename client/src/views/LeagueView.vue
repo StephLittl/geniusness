@@ -38,7 +38,7 @@
               </option>
             </select>
             <input v-model="scoreForm.date" type="date" required />
-            <input v-model.number="scoreForm.score" type="number" step="any" placeholder="Score" required />
+            <input v-model.number="scoreForm.score" type="number" step="any" placeholder="Score" required class="no-spinner" />
             <button type="submit" :disabled="scoreSubmitting">Save</button>
           </form>
           <p v-if="scoreError" class="error">{{ scoreError }}</p>
@@ -60,7 +60,7 @@
                 <tr v-for="row in gridRows" :key="row.key">
                   <td class="sticky-col row-label">
                     <strong>{{ row.playerName }}</strong><br />
-                    <span class="game-name">{{ row.gameName }}</span>
+                    <span class="game-name" :style="{ color: row.gameColor || '#666' }">{{ row.gameName }}</span>
                   </td>
                   <td v-for="date in dateColumns" :key="date" class="score-cell">
                     <span v-if="row.scores[date] !== undefined">{{ row.scores[date] }}</span>
@@ -73,7 +73,7 @@
         </div>
       </section>
 
-      <p><router-link to="/league">← Back to leagues</router-link></p>
+      <p><router-link to="/leagues">← Back to leagues</router-link></p>
     </template>
     <p v-else class="error">League not found.</p>
   </div>
@@ -123,6 +123,7 @@ export default {
             key,
             playerName: player.username || player.email || '—',
             gameName: game.name,
+            gameColor: game.color,
             scores: playerScores
           })
         }
@@ -234,8 +235,9 @@ export default {
 }
 .invite-row code {
   padding: 0.35rem 0.5rem;
-  background: #2a2a2a;
+  background: #f0f8f0;
   border-radius: 6px;
+  color: #2d5a3d;
 }
 .score-grid-section {
   margin-bottom: 2rem;
@@ -249,16 +251,27 @@ export default {
 .btn {
   padding: 0.5rem 1rem;
   border-radius: 8px;
-  border: 1px solid #444;
-  background: transparent;
-  color: inherit;
+  border: 1px solid #4a7c59;
+  background: white;
+  color: #2d5a3d;
   cursor: pointer;
+}
+.btn:hover {
+  background: #f0f8f0;
 }
 .add-score-form {
   padding: 1rem;
-  background: #2a2a2a;
+  background: #f0f8f0;
   border-radius: 8px;
   margin-bottom: 1rem;
+}
+.input.no-spinner::-webkit-inner-spin-button,
+.input.no-spinner::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.input.no-spinner {
+  -moz-appearance: textfield;
 }
 .add-score-form form {
   display: flex;
@@ -269,9 +282,34 @@ export default {
 .add-score-form select,
 .add-score-form input {
   padding: 0.5rem;
+  border: 1px solid #4a7c59;
+  border-radius: 4px;
 }
 .add-score-form input[type="number"] {
   width: 100px;
+}
+.add-score-form input[type="number"].no-spinner::-webkit-inner-spin-button,
+.add-score-form input[type="number"].no-spinner::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.add-score-form input[type="number"].no-spinner {
+  -moz-appearance: textfield;
+}
+.add-score-form button {
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  background: #2d5a3d;
+  color: white;
+  border: none;
+}
+.add-score-form button:hover {
+  background: #1e3d28;
+}
+.add-score-form button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
 }
 .error {
   color: #e74;
@@ -295,10 +333,11 @@ export default {
 .score-grid td {
   padding: 0.75rem;
   text-align: center;
-  border: 1px solid #333;
+  border: 1px solid #4a7c59;
 }
 .score-grid th {
-  background: #2a2a2a;
+  background: #2d5a3d;
+  color: white;
   font-weight: 500;
   position: sticky;
   top: 0;
@@ -307,11 +346,13 @@ export default {
 .sticky-col {
   position: sticky;
   left: 0;
-  background: #242424;
+  background: white;
   z-index: 2;
   text-align: left;
 }
 .score-grid th.sticky-col {
+  background: #2d5a3d;
+  color: white;
   z-index: 3;
 }
 .row-label {
@@ -332,11 +373,17 @@ export default {
   min-width: 60px;
 }
 .empty-cell {
-  color: var(--muted, #555);
+  color: #999;
 }
 .empty {
-  color: var(--muted, #666);
+  color: #666;
   margin: 2rem 0;
   text-align: center;
+}
+.error {
+  color: #c00;
+}
+.duration {
+  color: #666;
 }
 </style>

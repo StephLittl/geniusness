@@ -33,3 +33,9 @@ app.use('/api/league', leagueRoutes(supabase));
 
 const userGamesRoutes = require('./routes/userGames');
 app.use('/api/user-games', userGamesRoutes(supabase));
+
+const standingsRoutes = require('./routes/standings');
+app.use('/api/standings', standingsRoutes(supabase));
+
+const shareParserRoutes = require('./routes/shareParser');
+app.use('/api/share-parser', shareParserRoutes(supabase));
