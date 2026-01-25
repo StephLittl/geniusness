@@ -877,7 +877,7 @@ export default {
   border-radius: 8px;
   background: white;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: visible;
   position: relative;
   width: 100%;
   max-width: 100%;
@@ -900,6 +900,8 @@ export default {
   margin-bottom: 0.75rem;
   flex-shrink: 0;
   position: relative;
+  overflow: visible;
+  z-index: 10002;
 }
 .game-header label {
   display: flex;
@@ -912,7 +914,7 @@ export default {
   min-height: calc(160px - 2rem - 0.75rem);
   max-height: calc(160px - 2rem - 0.75rem);
   gap: 0;
-  overflow: hidden;
+  overflow: visible;
   flex-shrink: 0;
   width: 100%;
   max-width: 100%;
@@ -952,6 +954,7 @@ export default {
   vertical-align: middle;
   flex-shrink: 0;
   z-index: 10001;
+  overflow: visible;
 }
 .info-icon {
   cursor: help;
