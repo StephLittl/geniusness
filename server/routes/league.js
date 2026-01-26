@@ -1,5 +1,18 @@
 const express = require('express');
 const { generateInviteCode } = require('../lib/inviteCode');
+const wordleWords = require('../lib/wordleWords');
+
+// Helper function to get today's date in Eastern time zone
+function getEasternDate() {
+  const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  return formatter.format(now);
+}
 
 module.exports = function (supabase) {
   const router = express.Router();
@@ -11,10 +24,63 @@ module.exports = function (supabase) {
   });
 
   router.post('/create', async (req, res) => {
-    const { name, gameIds, userId, startDate, endDate, durationType, isRepeating } = req.body;
+    const { name, gameIds, userId, leagueType, startDate, endDate, resetPeriod, customPeriodDays, requiresStartingWord } = req.body;
 
     if (!name || !gameIds || gameIds.length === 0 || !userId) {
       return res.status(400).json({ error: 'Missing league name, games, or user' });
+    }
+
+    if (!leagueType || !['tracking', 'periodic', 'dated'].includes(leagueType)) {
+      return res.status(400).json({ error: 'Invalid league type. Must be tracking, periodic, or dated' });
+    }
+
+    // Validate periodic league
+    if (leagueType === 'periodic') {
+      if (!resetPeriod || !['weekly', 'monthly', 'yearly', 'custom'].includes(resetPeriod)) {
+        return res.status(400).json({ error: 'Periodic leagues require a reset period (weekly, monthly, yearly, or custom)' });
+      }
+      if (resetPeriod === 'custom' && (!customPeriodDays || customPeriodDays <= 0)) {
+        return res.status(400).json({ error: 'Custom period requires customPeriodDays > 0' });
+      }
+    }
+
+    // Validate dated league
+    if (leagueType === 'dated') {
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: 'Dated leagues require both start and end dates' });
+      }
+      if (new Date(startDate) > new Date(endDate)) {
+        return res.status(400).json({ error: 'Start date must be before end date' });
+      }
+    }
+
+    // Validate starting word requirement
+    if (requiresStartingWord) {
+      // Check if another league already requires a starting word
+      const { data: existingStartingWordLeague } = await supabase
+        .from('league')
+        .select('leagueid, name')
+        .eq('requires_starting_word', true)
+        .single();
+      
+      if (existingStartingWordLeague) {
+        return res.status(400).json({ 
+          error: `Another league ("${existingStartingWordLeague.name}") already requires a starting word. Only one league can have this feature enabled.` 
+        });
+      }
+
+      // Ensure Wordle is in the selected games
+      const { data: wordleGame } = await supabase
+        .from('games')
+        .select('gameid')
+        .eq('slug', 'wordle')
+        .single();
+      
+      if (!wordleGame || !gameIds.includes(wordleGame.gameid)) {
+        return res.status(400).json({ 
+          error: 'Leagues with required starting words must include Wordle' 
+        });
+      }
     }
 
     try {
@@ -38,11 +104,25 @@ module.exports = function (supabase) {
         name,
         invite_code: inviteCode,
         created_by: userId,
-        duration_type: durationType || 'indefinite',
-        is_repeating: isRepeating || false,
+        league_type: leagueType,
+        requires_starting_word: requiresStartingWord || false,
       };
-      if (startDate) leaguePayload.start_date = startDate;
-      if (endDate) leaguePayload.end_date = endDate;
+
+      // Set dates based on league type
+      if (leagueType === 'dated') {
+        leaguePayload.start_date = startDate;
+        leaguePayload.end_date = endDate;
+      } else if (leagueType === 'tracking') {
+        // Optional: can set start_date for tracking leagues
+        if (startDate) leaguePayload.start_date = startDate;
+      } else if (leagueType === 'periodic') {
+        // Optional: can set start_date for periodic leagues
+        if (startDate) leaguePayload.start_date = startDate;
+        leaguePayload.reset_period = resetPeriod;
+        if (resetPeriod === 'custom') {
+          leaguePayload.custom_period_days = customPeriodDays;
+        }
+      }
 
       const { data: leagueData, error: leagueError } = await supabase
         .from('league')
@@ -174,6 +254,74 @@ module.exports = function (supabase) {
     if (joinErr) return res.status(400).json({ error: joinErr.message });
 
     res.status(200).json({ leagueId: league.leagueid, name: league.name });
+  });
+
+  // Get or generate today's starting Wordle word
+  router.get('/starting-word/today', async (req, res) => {
+    try {
+      // Find the league that requires a starting word
+      const { data: league, error: leagueErr } = await supabase
+        .from('league')
+        .select('leagueid, name')
+        .eq('requires_starting_word', true)
+        .single();
+
+      if (leagueErr || !league) {
+        return res.json({ word: null, leagueName: null });
+      }
+
+      const today = getEasternDate();
+
+      // Check if we already have a word for today
+      const { data: existingWord, error: wordErr } = await supabase
+        .from('league_starting_words')
+        .select('word')
+        .eq('league_id', league.leagueid)
+        .eq('date', today)
+        .single();
+
+      if (wordErr && wordErr.code !== 'PGRST116') { // PGRST116 is "not found"
+        console.error('Error fetching starting word:', wordErr);
+        return res.status(500).json({ error: 'Failed to fetch starting word' });
+      }
+
+      if (existingWord) {
+        return res.json({ word: existingWord.word, leagueName: league.name });
+      }
+
+      // Generate a new word for today
+      if (!wordleWords || wordleWords.length === 0) {
+        return res.status(500).json({ error: 'Word list is empty. Please populate wordleWords.js' });
+      }
+
+      // Use date as seed for consistent word selection per day
+      // Simple hash function to convert date string to a number
+      const dateHash = today.split('').reduce((acc, char) => {
+        return ((acc << 5) - acc) + char.charCodeAt(0);
+      }, 0);
+      const seed = Math.abs(dateHash);
+      const wordIndex = seed % wordleWords.length;
+      const selectedWord = wordleWords[wordIndex].toUpperCase();
+
+      // Save the word to the database
+      const { error: insertErr } = await supabase
+        .from('league_starting_words')
+        .insert([{
+          league_id: league.leagueid,
+          date: today,
+          word: selectedWord
+        }]);
+
+      if (insertErr) {
+        console.error('Error saving starting word:', insertErr);
+        return res.status(500).json({ error: 'Failed to save starting word' });
+      }
+
+      res.json({ word: selectedWord, leagueName: league.name });
+    } catch (err) {
+      console.error('Error in starting-word/today:', err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   return router;

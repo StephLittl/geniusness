@@ -52,11 +52,32 @@ module.exports = function (supabase) {
         return res.status(404).json({ error: 'League not found' });
       }
 
-      // Get all scores for this league
+      // Get all users in this league
+      const { data: leaguePlayers, error: playersErr } = await supabase
+        .from('league_player')
+        .select('userid')
+        .eq('leagueid', leagueId);
+      
+      if (playersErr) {
+        return res.status(500).json({ error: playersErr.message });
+      }
+      
+      const leagueUserIds = (leaguePlayers || []).map(p => p.userid);
+      
+      if (leagueUserIds.length === 0) {
+        return res.json({
+          league,
+          overallStandings: [],
+          dailyStandings: {},
+          gameStandings: {}
+        });
+      }
+
+      // Get all scores for users in this league
       const { data: scores, error: scoresErr } = await supabase
         .from('scores')
-        .select('id, user_id, league_id, game_id, date, score')
-        .eq('league_id', leagueId)
+        .select('id, user_id, game_id, date, score')
+        .in('user_id', leagueUserIds)
         .order('date', { ascending: true });
       
       if (scoresErr) {

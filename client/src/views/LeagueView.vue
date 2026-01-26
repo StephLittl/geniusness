@@ -169,7 +169,6 @@ export default {
       try {
         await axios.post('/api/scores', {
           user_id: this.store.user.id,
-          league_id: this.route.params.id,
           game_id: this.scoreForm.gameId,
           date: this.scoreForm.date,
           score: scoreNum

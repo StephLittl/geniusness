@@ -8,31 +8,69 @@
       </div>
 
       <div class="field">
-        <label>Duration Type</label>
-        <select v-model="durationType" required>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-          <option value="yearly">Yearly</option>
-          <option value="indefinite">Indefinite</option>
-          <option value="specific">Specific Dates</option>
+        <label>League Type</label>
+        <select v-model="leagueType" required @change="onLeagueTypeChange">
+          <option value="tracking">Tracking Only (No Winners)</option>
+          <option value="periodic">Periodic Competition (Resets Regularly)</option>
+          <option value="dated">Dated Competition (Specific Dates)</option>
         </select>
+        <p class="field-hint">
+          <span v-if="leagueType === 'tracking'">Track scores over time with no winners or resets</span>
+          <span v-else-if="leagueType === 'periodic'">Competition that resets on a regular schedule (weekly, monthly, etc.)</span>
+          <span v-else-if="leagueType === 'dated'">One-time competition with specific start and end dates</span>
+        </p>
       </div>
 
-      <div v-if="durationType === 'specific'" class="field">
-        <label>Date Range</label>
-        <div class="date-row">
+      <!-- Periodic League Options -->
+      <template v-if="leagueType === 'periodic'">
+        <div class="field">
+          <label>Reset Period</label>
+          <select v-model="resetPeriod" required>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+            <option value="custom">Custom (specify days)</option>
+          </select>
+        </div>
+
+        <div v-if="resetPeriod === 'custom'" class="field">
+          <label>Custom Period (days)</label>
+          <input 
+            v-model.number="customPeriodDays" 
+            type="number" 
+            min="1" 
+            placeholder="e.g. 14 for bi-weekly"
+            required
+          />
+        </div>
+
+        <div class="field">
+          <label>Start Date (optional)</label>
+          <input v-model="startDate" type="date" />
+          <p class="field-hint">Leave blank to start from today</p>
+        </div>
+      </template>
+
+      <!-- Dated League Options -->
+      <template v-if="leagueType === 'dated'">
+        <div class="field">
+          <label>Start Date</label>
           <input v-model="startDate" type="date" required />
-          <span>to</span>
+        </div>
+        <div class="field">
+          <label>End Date</label>
           <input v-model="endDate" type="date" required />
         </div>
-      </div>
+      </template>
 
-      <div v-if="durationType !== 'indefinite'" class="field">
-        <label class="checkbox-label">
-          <input type="checkbox" v-model="isRepeating" />
-          Repeating (resets at end of period)
-        </label>
-      </div>
+      <!-- Tracking League Options -->
+      <template v-if="leagueType === 'tracking'">
+        <div class="field">
+          <label>Start Date (optional)</label>
+          <input v-model="startDate" type="date" />
+          <p class="field-hint">Leave blank to start from today</p>
+        </div>
+      </template>
 
       <div class="field">
         <label>Games</label>
@@ -44,7 +82,24 @@
         </div>
       </div>
 
-      <button type="submit" :disabled="creating">Create league</button>
+      <div class="field">
+        <label class="checkbox-label">
+          <input 
+            type="checkbox" 
+            v-model="requiresStartingWord"
+            :disabled="!hasWordleSelected"
+          />
+          <span>Require daily starting Wordle word</span>
+        </label>
+        <p class="field-hint" v-if="requiresStartingWord">
+          All players in this league must use the same starting word each day. Only one league can have this feature enabled.
+        </p>
+        <p class="field-hint" v-else-if="!hasWordleSelected">
+          Wordle must be selected to enable this feature.
+        </p>
+      </div>
+
+      <button type="submit" :disabled="creating || !isFormValid">Create league</button>
     </form>
     <p v-if="error" class="error">{{ error }}</p>
     <p><router-link to="/leagues">← Back to leagues</router-link></p>
@@ -61,12 +116,14 @@ export default {
     const today = new Date().toISOString().slice(0, 10)
     return {
       leagueName: '',
-      durationType: 'indefinite',
+      leagueType: 'tracking',
       startDate: today,
       endDate: today,
-      isRepeating: false,
+      resetPeriod: 'weekly',
+      customPeriodDays: null,
       games: [],
       selectedGames: [],
+      requiresStartingWord: false,
       creating: false,
       error: null
     }
@@ -75,6 +132,26 @@ export default {
     const store = useUserStore()
     const router = useRouter()
     return { store, router }
+  },
+  computed: {
+    hasWordleSelected() {
+      const wordleGame = this.games.find(g => g.slug === 'wordle')
+      return wordleGame && this.selectedGames.includes(wordleGame.gameid)
+    },
+    isFormValid() {
+      if (!this.leagueName || this.selectedGames.length === 0) return false
+      if (this.requiresStartingWord && !this.hasWordleSelected) return false
+      if (this.leagueType === 'dated') {
+        return this.startDate && this.endDate && new Date(this.startDate) <= new Date(this.endDate)
+      }
+      if (this.leagueType === 'periodic') {
+        if (this.resetPeriod === 'custom') {
+          return this.customPeriodDays && this.customPeriodDays > 0
+        }
+        return true
+      }
+      return true
+    }
   },
   async created() {
     try {
@@ -85,13 +162,21 @@ export default {
     }
   },
   methods: {
-    async createLeague() {
-      if (!this.leagueName || this.selectedGames.length === 0) {
-        this.error = 'Name and at least one game required'
-        return
+    onLeagueTypeChange() {
+      // Reset form when league type changes
+      if (this.leagueType === 'tracking') {
+        this.resetPeriod = 'weekly'
+        this.customPeriodDays = null
+      } else if (this.leagueType === 'periodic') {
+        this.endDate = null
+      } else if (this.leagueType === 'dated') {
+        this.resetPeriod = 'weekly'
+        this.customPeriodDays = null
       }
-      if (this.durationType === 'specific' && (!this.startDate || !this.endDate)) {
-        this.error = 'Start and end dates required for specific dates'
+    },
+    async createLeague() {
+      if (!this.isFormValid) {
+        this.error = 'Please fill in all required fields'
         return
       }
       this.error = null
@@ -101,13 +186,26 @@ export default {
           name: this.leagueName,
           gameIds: this.selectedGames,
           userId: this.store.user.id,
-          durationType: this.durationType,
-          isRepeating: this.isRepeating
+          leagueType: this.leagueType
         }
-        if (this.durationType === 'specific') {
+
+        if (this.leagueType === 'dated') {
           payload.startDate = this.startDate
           payload.endDate = this.endDate
+        } else if (this.leagueType === 'periodic') {
+          payload.resetPeriod = this.resetPeriod
+          if (this.startDate) payload.startDate = this.startDate
+          if (this.resetPeriod === 'custom') {
+            payload.customPeriodDays = this.customPeriodDays
+          }
+        } else if (this.leagueType === 'tracking') {
+          if (this.startDate) payload.startDate = this.startDate
         }
+
+        if (this.requiresStartingWord) {
+          payload.requiresStartingWord = true
+        }
+
         const res = await axios.post('/api/league/create', payload)
         this.router.push(`/leagues/${res.data.leagueId}`)
       } catch (err) {
@@ -126,8 +224,11 @@ export default {
 .field label { display: block; margin-bottom: 0.35rem; font-weight: 500; color: #2d5a3d; }
 .field input[type="text"],
 .field input[type="date"],
+.field input[type="number"],
 .field select { width: 100%; padding: 0.5rem; box-sizing: border-box; border: 1px solid #4a7c59; border-radius: 4px; }
-.checkbox-label { display: flex; align-items: center; gap: 0.5rem; font-weight: normal; }
+.checkbox-label { display: flex; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; }
+.checkbox-label input[type="checkbox"] { width: auto; cursor: pointer; }
+.field-hint { font-size: 0.85rem; color: #666; margin-top: 0.25rem; font-style: italic; }
 .date-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
 .date-row input { flex: 1; }
 .game-list { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; }

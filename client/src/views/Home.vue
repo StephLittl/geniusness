@@ -4,6 +4,15 @@
       <h1 class="page-title">Daily Scores</h1>
       <p class="greeting">Hi, {{ user?.username || user?.email || 'there' }}.</p>
 
+      <!-- Starting Wordle Word Display -->
+      <div v-if="startingWord && startingWordLeague" class="starting-word-banner">
+        <div class="starting-word-content">
+          <span class="starting-word-label">Today's Starting Wordle Word</span>
+          <span class="starting-word-value">{{ startingWord }}</span>
+          <span class="starting-word-league">for {{ startingWordLeague }}</span>
+        </div>
+      </div>
+
       <section v-if="loading" class="loading">Loading…</section>
       <template v-else>
         <!-- Daily Score Entry -->
@@ -339,7 +348,7 @@
         <router-link to="/leagues/create" class="btn-link">Create one</router-link>
       </div>
       <div v-else class="leagues-list-sidebar">
-        <div v-for="league in leagues.filter(l => l.name !== 'Personal')" :key="league.leagueid" class="league-item-sidebar">
+        <div v-for="league in leagues" :key="league.leagueid" class="league-item-sidebar">
           <router-link :to="`/leagues/${league.leagueid}`" class="league-link">
             {{ league.name }}
           </router-link>
@@ -377,7 +386,9 @@ export default {
       scoreForms: {},
       reenteringGame: null,
       reenterForm: { score: '' },
-      leagueStandings: {}
+      leagueStandings: {},
+      startingWord: null,
+      startingWordLeague: null
     }
   },
   setup() {
@@ -428,14 +439,22 @@ export default {
     async loadData() {
       this.loading = true
       try {
-        const [leaguesRes, gamesRes, scoresRes] = await Promise.all([
+        const [leaguesRes, gamesRes, scoresRes, startingWordRes] = await Promise.all([
           axios.get('/api/league/my', { params: { userId: this.store.user.id } }),
           axios.get(`/api/user-games/${this.store.user.id}`),
-          axios.get(`/api/scores/today/${this.store.user.id}`)
+          axios.get(`/api/scores/today/${this.store.user.id}`),
+          axios.get('/api/league/starting-word/today')
         ])
         this.leagues = leaguesRes.data.leagues || []
         this.userGames = gamesRes.data.games || []
         this.todayScores = scoresRes.data.scores || []
+        if (startingWordRes.data.word) {
+          this.startingWord = startingWordRes.data.word
+          this.startingWordLeague = startingWordRes.data.leagueName
+        } else {
+          this.startingWord = null
+          this.startingWordLeague = null
+        }
         this.initScoreForms()
         await this.loadStandings()
       } catch (err) {
@@ -752,19 +771,9 @@ export default {
       }
     },
     getLeagueNamesForGame(gameId) {
-      const scoreData = this.todayScoresByGame[String(gameId)]
-      if (!scoreData) return []
-      if (scoreData.leagues && scoreData.leagues.length > 0) {
-        // Filter out "Personal" league
-        return scoreData.leagues
-          .map(l => l?.name || l)
-          .filter(Boolean)
-          .filter(name => name !== 'Personal')
-      }
       return this.leagues
         .filter(l => l.games?.some(g => g.gameid === gameId))
         .map(l => l.name)
-        .filter(name => name !== 'Personal')
     },
     // Helper function to get today's date in Eastern time zone
     getEasternDate() {
@@ -831,6 +840,37 @@ export default {
   margin: 0 0 1rem;
   color: #666;
   font-size: 0.9rem;
+}
+.starting-word-banner {
+  background: #2d5a3d;
+  color: white;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.starting-word-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.starting-word-label {
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+.starting-word-value {
+  font-weight: bold;
+  font-size: 1.2rem;
+  letter-spacing: 0.1em;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+}
+.starting-word-league {
+  font-size: 0.85rem;
+  opacity: 0.9;
+  font-style: italic;
 }
 .daily-scores {
   margin-bottom: 2rem;
