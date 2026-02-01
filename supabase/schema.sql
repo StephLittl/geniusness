@@ -82,12 +82,24 @@ create index if not exists idx_league_starting_words_league_date on league_start
 -- Ensure only one league can have requires_starting_word = true
 create unique index if not exists idx_only_one_starting_word_league on league(leagueid) where requires_starting_word = true;
 
--- Games included in each league
+-- Games included in each league (temporal: add/drop over time)
+-- start_date: when the game was added to the league
+-- end_date: when the game was dropped (NULL = still active)
 create table if not exists league_game (
-  leagueid uuid references league(leagueid) on delete cascade,
-  gameid uuid references games(gameid) on delete cascade,
-  primary key (leagueid, gameid)
+  id uuid primary key default gen_random_uuid(),
+  leagueid uuid not null references league(leagueid) on delete cascade,
+  gameid uuid not null references games(gameid) on delete cascade,
+  start_date date not null default current_date,
+  end_date date,
+  constraint league_game_dates_valid check (end_date is null or end_date >= start_date)
 );
+
+-- Only one active (end_date IS NULL) row per league+game at a time
+create unique index if not exists idx_league_game_active_unique
+  on league_game (leagueid, gameid)
+  where end_date is null;
+
+create index if not exists idx_league_game_dates on league_game(leagueid, start_date, end_date);
 
 -- Players in each league
 create table if not exists league_player (

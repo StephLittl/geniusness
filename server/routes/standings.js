@@ -1,4 +1,5 @@
 const express = require('express');
+const { getEasternDate } = require('../lib/dateUtils');
 
 // Helper function to assign points with tie handling
 // Returns array of { userId, points } sorted by rank
@@ -84,16 +85,23 @@ module.exports = function (supabase) {
         return res.status(500).json({ error: scoresErr.message });
       }
 
-      // Get games and users
-      const { data: games } = await supabase
+      // Get all league_game rows (with dates) for historical filtering
+      const { data: leagueGames } = await supabase
         .from('league_game')
-        .select('gameid, games(*)')
+        .select('gameid, start_date, end_date, games(*)')
         .eq('leagueid', leagueId);
       
-      const gameIds = (games || []).map(g => g.gameid);
       const gameMap = {};
-      for (const g of games || []) {
-        gameMap[g.gameid] = g.games;
+      for (const lg of leagueGames || []) {
+        gameMap[lg.gameid] = lg.games;
+      }
+
+      // Helper: games active in the league on a given date
+      function gamesActiveOnDate(dateStr) {
+        const date = dateStr;
+        return (leagueGames || [])
+          .filter(lg => lg.start_date <= date && (!lg.end_date || lg.end_date >= date))
+          .map(lg => lg.gameid);
       }
 
       const { data: players } = await supabase
@@ -137,14 +145,15 @@ module.exports = function (supabase) {
       for (const date of Object.keys(scoresByDate).sort()) {
         const dateScores = scoresByDate[date];
         dailyTotals[date] = {};
-        
+        const gameIdsForDate = gamesActiveOnDate(date);
+
         // Initialize daily totals for all players
         for (const userId of userIds) {
           dailyTotals[date][userId] = 0;
         }
 
-        // For each game, rank players and assign points
-        for (const gameId of gameIds) {
+        // For each game active on this date, rank players and assign points
+        for (const gameId of gameIdsForDate) {
           const gameScores = dateScores.filter(s => s.game_id === gameId);
           if (gameScores.length === 0) continue;
 

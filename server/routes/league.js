@@ -1,18 +1,7 @@
 const express = require('express');
 const { generateInviteCode } = require('../lib/inviteCode');
 const wordleWords = require('../lib/wordleWords');
-
-// Helper function to get today's date in Eastern time zone
-function getEasternDate() {
-  const now = new Date();
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/New_York',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
-  return formatter.format(now);
-}
+const { getEasternDate } = require('../lib/dateUtils');
 
 module.exports = function (supabase) {
   const router = express.Router();
@@ -131,8 +120,13 @@ module.exports = function (supabase) {
       if (leagueError) throw leagueError;
 
       const leagueId = leagueData[0].leagueid;
+      const leagueStartDate = leagueData[0].start_date || getEasternDate();
 
-      const leagueGameRows = gameIds.map((gameid) => ({ leagueid: leagueId, gameid }));
+      const leagueGameRows = gameIds.map((gameid) => ({
+        leagueid: leagueId,
+        gameid,
+        start_date: leagueStartDate
+      }));
       const { error: lgError } = await supabase
         .from('league_game')
         .insert(leagueGameRows);
@@ -170,12 +164,15 @@ module.exports = function (supabase) {
       .order('created_at', { ascending: false });
     if (error) return res.status(500).json({ error: error.message });
 
+    const today = getEasternDate();
     const leaguesWithGames = await Promise.all(
       leagues.map(async (l) => {
         const { data: lg } = await supabase
           .from('league_game')
           .select('gameid')
-          .eq('leagueid', l.leagueid);
+          .eq('leagueid', l.leagueid)
+          .lte('start_date', today)
+          .or(`end_date.is.null,end_date.gte.${today}`);
         const gameIds = (lg || []).map((g) => g.gameid);
         let games = [];
         if (gameIds.length) {
@@ -199,10 +196,13 @@ module.exports = function (supabase) {
       .single();
     if (leagueErr || !league) return res.status(404).json({ error: 'League not found' });
 
+    const today = getEasternDate();
     const { data: lg } = await supabase
       .from('league_game')
       .select('gameid')
-      .eq('leagueid', id);
+      .eq('leagueid', id)
+      .lte('start_date', today)
+      .or(`end_date.is.null,end_date.gte.${today}`);
     const gameIds = (lg || []).map((g) => g.gameid);
     let games = [];
     if (gameIds.length) {
@@ -225,6 +225,71 @@ module.exports = function (supabase) {
     }
 
     res.json({ ...league, games, players: users });
+  });
+
+  // Add games to a league (with optional start_date for backdating)
+  router.post('/:id/games', async (req, res) => {
+    const { id: leagueId } = req.params;
+    const { gameIds, startDate } = req.body;
+    if (!gameIds || !Array.isArray(gameIds) || gameIds.length === 0) {
+      return res.status(400).json({ error: 'Missing gameIds array' });
+    }
+
+    const { data: league, error: leagueErr } = await supabase
+      .from('league')
+      .select('leagueid')
+      .eq('leagueid', leagueId)
+      .single();
+    if (leagueErr || !league) return res.status(404).json({ error: 'League not found' });
+
+    const today = getEasternDate();
+    const effectiveStart = startDate || today;
+
+    // Filter out games already active in this league
+    const { data: existing } = await supabase
+      .from('league_game')
+      .select('gameid')
+      .eq('leagueid', leagueId)
+      .in('gameid', gameIds)
+      .is('end_date', null);
+    const alreadyActive = new Set((existing || []).map((e) => e.gameid));
+    const toAdd = gameIds.filter((g) => !alreadyActive.has(g));
+    if (toAdd.length === 0) {
+      return res.status(400).json({ error: 'All games are already in the league' });
+    }
+
+    const rows = toAdd.map((gameid) => ({
+      leagueid: leagueId,
+      gameid,
+      start_date: effectiveStart
+    }));
+    const { error: insertErr } = await supabase
+      .from('league_game')
+      .insert(rows);
+    if (insertErr) return res.status(400).json({ error: insertErr.message });
+    res.status(201).json({ success: true });
+  });
+
+  // Drop a game from a league (sets end_date to today)
+  router.patch('/:id/games/:gameId', async (req, res) => {
+    const { id: leagueId, gameId } = req.params;
+
+    const { data: active, error: findErr } = await supabase
+      .from('league_game')
+      .select('id')
+      .eq('leagueid', leagueId)
+      .eq('gameid', gameId)
+      .is('end_date', null)
+      .single();
+    if (findErr || !active) return res.status(404).json({ error: 'Game not found or already dropped' });
+
+    const today = getEasternDate();
+    const { error: updateErr } = await supabase
+      .from('league_game')
+      .update({ end_date: today })
+      .eq('id', active.id);
+    if (updateErr) return res.status(500).json({ error: updateErr.message });
+    res.json({ success: true });
   });
 
   router.post('/join', async (req, res) => {

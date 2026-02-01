@@ -1,0 +1,32 @@
+{
+  "user_ids": {
+    "sal": "a47b956e-44d2-4dbc-900f-ddf0231e58be",
+    "bob": "88122bea-4dc3-4ef6-b209-9ca5ef23a186",
+    "sary": "1fd1870a-013e-495c-9db3-5f27a30b7fae",
+    "stolowd": "c8099632-257b-4310-b5f5-d187a631feb1"
+  },
+  "game_ids": {
+    "crossword": "0a28ad03-7fff-42d2-af6e-ce8490782b47",
+    "connections": "79a41d7a-c91f-4b17-8225-fd8e53ac36e1",
+    "pyramid": "19eb97a3-8a3a-4a74-9b01-8a0a2213d042",
+    "spelling-bee": "42c9b5c5-0a2f-4d7a-a3f5-affebd05ff75",
+    "wordle": "e505888f-ecb8-4764-9c9c-e1d9734b6c95",
+    "waffle": "aa80bcf1-48e9-4e67-8e39-7b80e8714135",
+    "keyword": "2cfc0d39-05df-4d26-b189-72d41f4e19e6",
+    "flashback": "c3ea1e8c-c6d5-46bd-be46-3f289637b8ee",
+    "quintumble": "fe10d3d6-6fce-44c6-a817-883f0ea3d440",
+    "bracket-city": "74e1475d-9f2c-4cfe-9768-eb129fa171f0"
+  },
+  "league_id": "af85fcf2-5b3a-4ca9-88a4-4352c1891a89",
+  "league_games": {
+    "crossword": { "start_date": "2023-10-01", "end_date": null },
+    "connections": { "start_date": "2023-10-01", "end_date": null },
+    "wordle": { "start_date": "2023-10-01", "end_date": null },
+    "spelling-bee": { "start_date": "2023-10-01", "end_date": null },
+    "waffle": { "start_date": "2023-10-01", "end_date": "2024-09-30" },
+    "keyword": { "start_date": "2023-11-01", "end_date": null },
+    "flashback": { "start_date": "2023-11-01", "end_date": "2024-06-30" },
+    "quintumble": { "start_date": "2023-12-01", "end_date": null },
+    "bracket-city": { "start_date": "2025-04-01", "end_date": null }
+  }
+}

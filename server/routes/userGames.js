@@ -1,4 +1,5 @@
 const express = require('express');
+const { getEasternDate } = require('../lib/dateUtils');
 
 module.exports = function (supabase) {
   const router = express.Router();
@@ -22,10 +23,13 @@ module.exports = function (supabase) {
     const leagueIds = (leagueMemberships || []).map(m => m.leagueid);
     let leagueGameIds = [];
     if (leagueIds.length) {
+      const today = getEasternDate();
       const { data: leagueGamesData } = await supabase
         .from('league_game')
         .select('gameid')
-        .in('leagueid', leagueIds);
+        .in('leagueid', leagueIds)
+        .lte('start_date', today)
+        .or(`end_date.is.null,end_date.gte.${today}`);
       leagueGameIds = [...new Set((leagueGamesData || []).map(lg => lg.gameid))];
     }
     
