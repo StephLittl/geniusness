@@ -22,6 +22,7 @@
     { host: 'buzzfeed.com', pathPrefix: '/pyramid-scheme', slug: 'pyramid-scheme' },
     { host: 'washingtonpost.com', pathPrefix: '/games/keyword', slug: 'keyword' },
     { host: 'washingtonpost.com', pathPrefix: '/games', slug: 'keyword', pathContains: 'keyword' },
+    { host: 'washingtonpost.com', pathPrefix: '/games-static/keyword-game', slug: 'keyword' },
     { host: 'games.washingtonpost.com', pathPrefix: '/keyword', slug: 'keyword' },
     { host: 'games.washingtonpost.com', pathPrefix: '/games/keyword', slug: 'keyword' },
     { host: 'quintumble.com', pathPrefix: '/', slug: 'quintumble' },
@@ -97,31 +98,83 @@
     return null;
   }
 
-  // Keyword (Washington Post): no share output; scrape time (seconds) and errors from page. Score = time + errors*10.
+  /** True when we're inside the Keyword game iframe (not the parent wrapper). */
+  function isKeywordIframe() {
+    return /\/games-static\/keyword-game\//.test(window.location.pathname || '');
+  }
+
+  /** Returns true when the page shows a finished game (share text or Keyword time/errors). */
+  function isGameComplete(slug) {
+    const body = document.body && document.body.innerText;
+    
+    // Keyword: only show in the game iframe, and only when time+guesses are visible
+    if (slug === 'keyword') {
+      if (!isKeywordIframe()) return false;  // Parent page: no button (iframe will show it)
+      if (!body) return false;
+      const hasTime = /\d{2}:\d{2}/i.test(body);
+      const hasGuesses = /guesses?[:\s]+\d+/i.test(body) || /\d+\s*guesses?/i.test(body);
+      return hasTime && hasGuesses;
+    }
+    
+    // Check if we can extract share text from DOM
+    if (tryGetShareFromDOM()) return true;
+    
+    // Check body text for share-like content
+    if (body && looksLikeShareText(body)) return true;
+    
+    // Game-specific completion indicators (more lenient)
+    if (!body) return false;
+    
+    // Wordle: "Statistics" or share button visible
+    if (slug === 'wordle' && (/Statistics/i.test(body) || /Share/i.test(body))) return true;
+    
+    // Connections: "Puzzle #" and category groups visible
+    if (slug === 'connections' && /Puzzle\s*#\d+/i.test(body) && /🟨🟩🟦🟪/.test(body)) return true;
+    
+    // Spelling Bee: "Genius" or "Queen Bee" or score summary
+    if (slug === 'spelling-bee' && (/Genius|Queen Bee|Great|Nice|Good|Solid|Amazing/i.test(body) || /You found \d+ words?/i.test(body))) return true;
+    
+    // Strands: completion message
+    if (slug === 'strands' && /words?/i.test(body) && /Strands/i.test(body)) return true;
+    
+    // Other games: if body has emoji squares or game-specific patterns, assume complete
+    if (/[🟪🟦🟩🟨⬜⬛🟥]/.test(body)) return true;
+    
+    return false;
+  }
+
+  // Keyword (Washington Post): no share output; scrape time (seconds) and guesses from page. 
+  // Score = time + errors*10, where errors = guesses - 6 (minimum is 6 guesses for a perfect game)
   function tryGetKeywordFromDOM() {
     const text = (document.body && document.body.innerText) || '';
-    // Prefer "Time: X" so we get the full number (e.g. 12 not 2)
+    
+    // Parse time from "00:11" format (MM:SS) or "X seconds"
     let time = null;
-    const timeLabel = text.match(/time[:\s]+(\d+)/i);
-    if (timeLabel && timeLabel[1]) time = parseInt(timeLabel[1], 10);
+    const mmssMatch = text.match(/(\d{2}):(\d{2})/);
+    if (mmssMatch) {
+      const minutes = parseInt(mmssMatch[1], 10);
+      const seconds = parseInt(mmssMatch[2], 10);
+      time = minutes * 60 + seconds;
+    }
     if (time == null) {
-      // Match all "X seconds" / "X sec" and take the largest (avoids "2" from "12" split across DOM)
+      const timeLabel = text.match(/time[:\s]+(\d+)/i);
+      if (timeLabel && timeLabel[1]) time = parseInt(timeLabel[1], 10);
+    }
+    if (time == null) {
       const secMatches = text.matchAll(/(\d+)\s*seconds?/gi);
       for (const m of secMatches) {
         const n = parseInt(m[1], 10);
         if (!isNaN(n) && n < 3600 && (time == null || n > time)) time = n;
       }
     }
-    if (time == null) {
-      const secMatches = text.matchAll(/(\d+)\s*sec\b/gi);
-      for (const m of secMatches) {
-        const n = parseInt(m[1], 10);
-        if (!isNaN(n) && n < 3600 && (time == null || n > time)) time = n;
-      }
-    }
-    const errMatch = text.match(/(\d+)\s*errors?/i) || text.match(/(\d+)\s*wrong/i) || text.match(/(\d+)\s*mistakes?/i) || text.match(/errors?[:\s]+(\d+)/i);
-    const errors = errMatch && errMatch[1] ? parseInt(errMatch[1], 10) : null;
-    if (time != null && !isNaN(time) && errors != null && !isNaN(errors) && time >= 0 && time < 3600 && errors >= 0 && errors < 20) {
+    
+    // Parse guesses (Keyword uses "Guesses" not "Errors")
+    const guessMatch = text.match(/guesses?[:\s]+(\d+)/i) || text.match(/(\d+)\s*guesses?/i);
+    const guesses = guessMatch && guessMatch[1] ? parseInt(guessMatch[1], 10) : null;
+    
+    if (time != null && !isNaN(time) && guesses != null && !isNaN(guesses) && time >= 0 && time < 3600 && guesses >= 6 && guesses < 50) {
+      // Calculate errors: guesses - 6 (minimum perfect game is 6 guesses)
+      const errors = guesses - 6;
       return 'Time: ' + time + ', Errors: ' + errors;
     }
     return null;
@@ -135,9 +188,11 @@
     if (existing) return;
 
     if (!document.body) {
-      setTimeout(createButton, 100);
+      setTimeout(maybeShowButton, 100);
       return;
     }
+
+    if (!isGameComplete(slug)) return;
 
     const root = document.createElement('div');
     root.id = 'geniusness-extension-root';
@@ -229,14 +284,47 @@
     document.body.appendChild(root);
   }
 
+  /** Show the button only when we're on a known game and it's complete. */
+  function maybeShowButton() {
+    const slug = getGameSlug();
+    if (!slug) return;
+    if (document.getElementById('geniusness-extension-root')) return;
+    createButton();
+  }
+
   function init() {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', createButton);
-    } else {
-      createButton();
+    function scheduleCheck() {
+      maybeShowButton();
     }
-    // Retry after a short delay for SPAs that change the DOM after load
-    setTimeout(createButton, 1500);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', scheduleCheck);
+    } else {
+      scheduleCheck();
+    }
+    // Retry after a short delay for SPAs that reveal completion state later
+    setTimeout(scheduleCheck, 1500);
+    setTimeout(scheduleCheck, 4000);
+
+    // When the DOM changes (e.g. game shows results), re-check. Throttle to avoid excessive work.
+    let checkScheduled = false;
+    function throttledCheck() {
+      if (checkScheduled) return;
+      checkScheduled = true;
+      setTimeout(function () {
+        checkScheduled = false;
+        maybeShowButton();
+      }, 500);
+    }
+    const observer = new MutationObserver(throttledCheck);
+    function observeBody() {
+      if (!document.body) {
+        setTimeout(observeBody, 100);
+        return;
+      }
+      observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    }
+    if (document.body) observeBody();
+    else document.addEventListener('DOMContentLoaded', observeBody);
   }
 
   init();
