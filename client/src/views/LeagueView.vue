@@ -5,6 +5,7 @@
       <header class="header">
         <div>
           <h1>{{ league.name }}</h1>
+          <p class="current-date">{{ currentDateFormatted }}</p>
         </div>
         <div v-if="league.invite_code" class="invite">
           <label>Invite code</label>
@@ -15,23 +16,83 @@
         </div>
       </header>
 
-      <!-- Who won yesterday (when viewing current period) – always show above scores box -->
-      <p v-if="periodOffset === 0" class="yesterday-winners">
-        {{ yesterdayWinnersText || 'Yesterday: No scores yet.' }}
-      </p>
+      <!-- Standings at top: short leaderboard + last month in corner -->
+      <section v-if="!isPersonalLeague" class="standings-top">
+        <div class="standings-leaderboard">
+          <h2 class="standings-heading">Standings</h2>
+          <p v-if="scoreDateRange && periodOffset !== 0" class="standings-period-label">
+            {{ scoreDateRangeLabel }}
+          </p>
+          <div v-if="periodStandings.length" class="standings-list compact">
+            <div
+              v-for="(player, idx) in periodStandings"
+              :key="player.userId"
+              class="standing-row"
+              :class="{ 'is-you': player.userId === store.user?.id }"
+            >
+              <span class="rank">{{ idx + 1 }}</span>
+              <span class="player-name">{{ player.username }}</span>
+              <span class="player-points">{{ player.totalPoints }} pts</span>
+            </div>
+          </div>
+          <div v-else class="no-standings">No scores yet.</div>
+        </div>
+        <div v-if="periodOffset === 0" class="yesterday-standings-corner">
+          <h3 class="last-month-heading">Yesterday</h3>
+          <div v-if="yesterdayStandings.length" class="standings-list compact small">
+            <div
+              v-for="(player, idx) in yesterdayStandings"
+              :key="player.userId"
+              class="standing-row"
+              :class="{ 'is-you': player.userId === store.user?.id }"
+            >
+              <span class="rank">{{ idx + 1 }}</span>
+              <span class="player-name">{{ player.username }}</span>
+              <span class="player-points">{{ player.totalPoints }}</span>
+            </div>
+          </div>
+          <div v-else class="no-standings">—</div>
+        </div>
+        <div class="last-month-standings-corner">
+          <h3 class="last-month-heading">Last month</h3>
+          <div v-if="lastMonthStandings.length" class="standings-list compact small">
+            <div
+              v-for="(player, idx) in lastMonthStandings"
+              :key="player.userId"
+              class="standing-row"
+              :class="{ 'is-you': player.userId === store.user?.id }"
+            >
+              <span class="rank">{{ idx + 1 }}</span>
+              <span class="player-name">{{ player.username }}</span>
+              <span class="player-points">{{ player.totalPoints }}</span>
+            </div>
+          </div>
+          <div v-else class="no-standings">—</div>
+        </div>
+      </section>
 
-      <!-- Current period scores (at top) -->
+      <!-- Current period scores -->
       <section class="score-grid-section">
         <div class="grid-controls">
-          <button type="button" @click="goToPreviousPeriod" class="btn" :disabled="!canGoOlder">
+          <button type="button" @click="goToPreviousPeriod" class="btn btn-nav" :disabled="!canGoOlder">
             ← {{ periodNavLabel.prev }}
+          </button>
+          <button type="button" @click="goToNextPeriod" class="btn btn-nav" :disabled="periodOffset >= 0">
+            {{ periodNavLabel.next }} →
           </button>
           <button v-if="periodOffset !== 0" type="button" @click="goToCurrentPeriod" class="btn btn-current">
             {{ periodNavLabel.current }}
           </button>
-          <button type="button" @click="goToNextPeriod" class="btn" :disabled="periodOffset >= 0">
-            {{ periodNavLabel.next }} →
-          </button>
+          <select
+            v-if="periodSelectOptions.length"
+            class="period-select"
+            :value="periodOffset"
+            @change="goToPeriod(Number(($event.target).value))"
+          >
+            <option v-for="opt in periodSelectOptions" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
         </div>
         <div v-if="!scores.length" class="empty">No scores in this period.</div>
         <div v-else class="grid-scroll-box">
@@ -63,60 +124,6 @@
         </div>
       </section>
 
-      <!-- Last month's scores (compact) -->
-      <section v-if="lastMonthScores.length" class="last-month-section">
-        <h3 class="last-month-title">Last month</h3>
-        <div class="grid-scroll-box last-month-box">
-          <div v-for="section in lastMonthGridByGame" :key="section.gameId" class="game-block">
-            <h4 class="game-block-title" :style="{ color: section.gameColor || '#333' }">{{ section.gameName }}</h4>
-            <table class="score-grid score-grid-compact">
-              <thead>
-                <tr>
-                  <th class="sticky-col">Player</th>
-                  <th v-for="date in lastMonthDateColumns" :key="date" class="date-col">{{ formatDate(date) }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="row in section.playerRows" :key="row.key">
-                  <td class="sticky-col row-label">{{ row.playerName }}</td>
-                  <td
-                    v-for="date in lastMonthDateColumns"
-                    :key="date"
-                    class="score-cell"
-                    :style="getScoreCellStyleForScores(section, date, row, lastMonthRankByGameAndDate)"
-                  >
-                    <span v-if="row.scores[date] !== undefined">{{ row.scores[date] }}</span>
-                    <span v-else class="empty-cell">—</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- Standings (hidden for Personal league) -->
-      <section v-if="!isPersonalLeague" class="standings-section">
-        <h2>Standings</h2>
-        <div v-if="standingsLoading" class="loading">Loading standings…</div>
-        <div v-else-if="standings.overallStandings?.length" class="standings-block">
-          <h3>Overall</h3>
-          <div class="standings-list">
-            <div
-              v-for="(player, idx) in standings.overallStandings"
-              :key="player.userId"
-              class="standing-row"
-              :class="{ 'is-you': player.userId === store.user?.id }"
-            >
-              <span class="rank">{{ idx + 1 }}</span>
-              <span class="player-name">{{ player.username }}</span>
-              <span class="player-points">{{ player.totalPoints }} pts</span>
-            </div>
-          </div>
-        </div>
-        <div v-else class="no-standings">No scores yet.</div>
-      </section>
-
       <p><router-link to="/leagues">← Back to leagues</router-link></p>
     </template>
     <p v-else class="error">League not found.</p>
@@ -137,7 +144,10 @@ export default {
       loading: true,
       periodOffset: 0,
       standings: {},
-      standingsLoading: false
+      standingsLoading: false,
+      periodStandings: [],
+      yesterdayStandings: [],
+      lastMonthStandings: []
     }
   },
   setup() {
@@ -157,11 +167,11 @@ export default {
       const l = this.league
       if (!l) return { prev: 'Previous', next: 'Next', current: 'Current period' }
       if (l.league_type === 'periodic' && l.reset_period) {
-        if (l.reset_period === 'weekly') return { prev: 'Previous week', next: 'Next week', current: 'This week' }
-        if (l.reset_period === 'monthly') return { prev: 'Previous month', next: 'Next month', current: 'This month' }
-        if (l.reset_period === 'yearly') return { prev: 'Previous year', next: 'Next year', current: 'This year' }
+        if (l.reset_period === 'weekly') return { prev: 'Previous week', next: 'Next week', current: 'Current week' }
+        if (l.reset_period === 'monthly') return { prev: 'Previous month', next: 'Next month', current: 'Current month' }
+        if (l.reset_period === 'yearly') return { prev: 'Previous year', next: 'Next year', current: 'Current year' }
       }
-      return { prev: 'Previous 30 days', next: 'Next 30 days', current: 'Last 30 days' }
+      return { prev: 'Previous 30 days', next: 'Next 30 days', current: 'Current 30 days' }
     },
     canGoOlder() {
       if (!this.league) return false
@@ -170,59 +180,64 @@ export default {
       if (!start) return true
       return olderRange.to > start
     },
+    // Options for month/period selector (monthly: "Jan 2026", etc.)
+    periodSelectOptions() {
+      if (!this.league) return []
+      const l = this.league
+      const start = l.start_date || this.getEasternDate()
+      const opts = []
+      if (l.league_type === 'periodic' && l.reset_period === 'monthly') {
+        for (let off = 0; off >= -60; off--) {
+          const { from } = this.getScoreDateRange(l, off)
+          if (from < start) break
+          const [y, m] = from.split('-').map(Number)
+          const monthName = new Date(y, m - 1, 1).toLocaleString('default', { month: 'short' })
+          opts.push({ value: off, label: `${monthName} ${y}` })
+        }
+        return opts
+      }
+      if (l.league_type === 'periodic' && l.reset_period === 'weekly') {
+        for (let off = 0; off >= -52; off--) {
+          const { from, to } = this.getScoreDateRange(l, off)
+          if (to < start) break
+          opts.push({ value: off, label: `${from} – ${to}` })
+        }
+        return opts
+      }
+      if (l.league_type === 'periodic' && l.reset_period === 'yearly') {
+        const today = this.getEasternDate()
+        const currentYear = Number(today.slice(0, 4))
+        const startYear = start ? Number(String(start).slice(0, 4)) : currentYear - 5
+        for (let y = currentYear; y >= startYear && y >= currentYear - 10; y--) {
+          opts.push({ value: y - currentYear, label: String(y) })
+        }
+        return opts
+      }
+      return []
+    },
     scoreDateRangeLabel() {
       if (!this.scoreDateRange) return ''
       const { from, to } = this.scoreDateRange
       if (from === to) return from
       return `${from} – ${to}`
     },
+    currentDateFormatted() {
+      const d = this.getEasternDate()
+      if (!d) return ''
+      const [y, m, day] = d.split('-').map(Number)
+      const date = new Date(y, m - 1, day)
+      return date.toLocaleDateString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric' })
+    },
     yesterdayDate() {
       return this.addDaysToDate(this.getEasternDate(), -1)
     },
-    // When viewing current period: who won yesterday per game and daily winner
-    yesterdayWinnersText() {
-      if (this.periodOffset !== 0 || !this.league?.games?.length || !this.scores.length) return ''
-      const yesterday = this.yesterdayDate
-      const dayScores = this.scores.filter(s => s.date === yesterday)
-      if (!dayScores.length) return ''
-      const parts = []
-      const gameMap = Object.fromEntries((this.league.games || []).map(g => [g.gameid, g]))
-      for (const game of this.league.games) {
-        const gs = dayScores.filter(s => s.game_id === game.gameid)
-        if (gs.length === 0) continue
-        const isLowerBetter = game.score_type !== 'higher_better'
-        gs.sort((a, b) => isLowerBetter ? Number(a.score) - Number(b.score) : Number(b.score) - Number(a.score))
-        const winnerId = gs[0].user_id
-        const winner = this.league.players?.find(p => p.user_id === winnerId)
-        const name = winner?.username || winner?.email || '—'
-        parts.push(`${game.name} — ${name}`)
-      }
-      if (parts.length === 0) return ''
-      // Daily winner: lowest sum of rank points (1st=1, etc.) across games
-      const userIds = [...new Set(dayScores.map(s => s.user_id))]
-      const pointsByUser = Object.fromEntries(userIds.map(id => [id, 0]))
-      for (const game of this.league.games) {
-        const gs = dayScores.filter(s => s.game_id === game.gameid).slice()
-        if (gs.length === 0) continue
-        const isLowerBetter = game.score_type !== 'higher_better'
-        gs.sort((a, b) => isLowerBetter ? Number(a.score) - Number(b.score) : Number(b.score) - Number(a.score))
-        let rank = 1
-        let prevScore = null
-        for (let i = 0; i < gs.length; i++) {
-          if (prevScore != null && gs[i].score !== prevScore) rank = i + 1
-          prevScore = gs[i].score
-          pointsByUser[gs[i].user_id] = (pointsByUser[gs[i].user_id] || 0) + rank
-        }
-      }
-      const minPoints = Math.min(...Object.values(pointsByUser).filter(p => p > 0))
-      const dailyWinnerId = userIds.find(id => pointsByUser[id] === minPoints)
-      const dailyWinner = this.league.players?.find(p => p.user_id === dailyWinnerId)
-      const dailyName = dailyWinner?.username || dailyWinner?.email || '—'
-      return `Yesterday: ${parts.join('; ')}. Daily: ${dailyName}.`
-    },
     dateColumns() {
       if (!this.scores.length) return []
-      const dates = [...new Set(this.scores.map(s => s.date))].sort().reverse()
+      const yesterday = this.periodOffset === 0 ? this.yesterdayDate : null
+      const dates = [...new Set(this.scores.map(s => this.normalizeDate(s.date)))]
+        .filter(d => !yesterday || d !== yesterday)
+        .sort()
+        .reverse()
       return dates
     },
     gridRows() {
@@ -256,7 +271,7 @@ export default {
           const playerScores = {}
           for (const score of this.scores) {
             if (score.user_id === player.user_id && score.game_id === game.gameid) {
-              playerScores[score.date] = score.score
+              playerScores[this.normalizeDate(score.date)] = score.score
             }
           }
           return {
@@ -304,7 +319,7 @@ export default {
     },
     lastMonthDateColumns() {
       if (!this.lastMonthScores.length) return []
-      return [...new Set(this.lastMonthScores.map(s => s.date))].sort().reverse()
+      return [...new Set(this.lastMonthScores.map(s => this.normalizeDate(s.date)))].sort().reverse()
     },
     lastMonthGridByGame() {
       if (!this.league?.games || !this.league?.players || !this.lastMonthScores.length) return []
@@ -313,7 +328,7 @@ export default {
           const playerScores = {}
           for (const score of this.lastMonthScores) {
             if (score.user_id === player.user_id && score.game_id === game.gameid) {
-              playerScores[score.date] = score.score
+              playerScores[this.normalizeDate(score.date)] = score.score
             }
           }
           return {
@@ -361,10 +376,44 @@ export default {
     await this.fetchLeague()
     await this.fetchScores()
     await this.fetchLastMonthScores()
-    if (!this.isPersonalLeague) await this.fetchStandings()
+    if (!this.isPersonalLeague) {
+      await this.fetchPeriodStandings()
+      await this.fetchYesterdayStandings()
+      await this.fetchLastMonthStandings()
+    }
     this.loading = false
   },
   methods: {
+    async fetchPeriodStandings() {
+      if (!this.route.params.id || !this.league) return
+      try {
+        const { from, to } = this.getScoreDateRange(this.league, this.periodOffset)
+        const res = await axios.get(`/api/standings/${this.route.params.id}`, { params: { from, to } })
+        this.periodStandings = res.data.overallStandings || []
+      } catch (err) {
+        this.periodStandings = []
+      }
+    },
+    async fetchYesterdayStandings() {
+      if (!this.route.params.id || !this.league) return
+      try {
+        const yesterday = this.yesterdayDate
+        const res = await axios.get(`/api/standings/${this.route.params.id}`, { params: { from: yesterday, to: yesterday } })
+        this.yesterdayStandings = res.data.overallStandings || []
+      } catch (err) {
+        this.yesterdayStandings = []
+      }
+    },
+    async fetchLastMonthStandings() {
+      if (!this.route.params.id || !this.league) return
+      try {
+        const { from, to } = this.getScoreDateRange(this.league, -1)
+        const res = await axios.get(`/api/standings/${this.route.params.id}`, { params: { from, to } })
+        this.lastMonthStandings = res.data.overallStandings || []
+      } catch (err) {
+        this.lastMonthStandings = []
+      }
+    },
     async fetchStandings() {
       if (!this.route.params.id) return
       this.standingsLoading = true
@@ -393,7 +442,13 @@ export default {
     async fetchScores() {
       if (!this.league) return
       try {
-        const { from, to } = this.getScoreDateRange(this.league, this.periodOffset)
+        let { from, to } = this.getScoreDateRange(this.league, this.periodOffset)
+        // When viewing current period, include yesterday so "who won yesterday" works
+        // (e.g. Feb 1: yesterday is Jan 31, which is in previous month)
+        if (this.periodOffset === 0) {
+          const yesterday = this.addDaysToDate(this.getEasternDate(), -1)
+          if (yesterday < from) from = yesterday
+        }
         const params = { from, to }
         const res = await axios.get(`/api/scores/league/${this.route.params.id}`, { params })
         this.scores = res.data.scores || []
@@ -412,6 +467,11 @@ export default {
         this.lastMonthScores = []
       }
     },
+    normalizeDate(dateVal) {
+      if (dateVal == null) return ''
+      const s = String(dateVal)
+      return s.length >= 10 ? s.slice(0, 10) : s
+    },
     addDaysToDate(dateStr, delta) {
       const [y, m, d] = dateStr.split('-').map(Number)
       const date = new Date(y, m - 1, d)
@@ -426,8 +486,10 @@ export default {
       navigator.clipboard?.writeText(this.league.invite_code).catch(() => {})
     },
     formatDate(dateStr) {
-      // Parse date string (YYYY-MM-DD), output M/D to fit in small box
-      const [, month, day] = dateStr.split('-').map(Number)
+      if (!dateStr) return ''
+      const s = String(dateStr).slice(0, 10)
+      const [, month, day] = s.split('-').map(Number)
+      if (!month || !day) return s
       return `${month}/${day}`
     },
     getScoreCellStyle(gameId, gameColor, date, row) {
@@ -547,17 +609,30 @@ export default {
       if (fromClamped > toClamped) fromClamped = toClamped;
       return { from: fromClamped, to: toClamped };
     },
-    goToPreviousPeriod() {
+    async goToPreviousPeriod() {
       this.periodOffset -= 1;
-      this.fetchScores();
+      this.scores = [];
+      await this.fetchScores();
+      if (!this.isPersonalLeague) await this.fetchPeriodStandings();
     },
-    goToNextPeriod() {
+    async goToNextPeriod() {
       this.periodOffset += 1;
-      this.fetchScores();
+      this.scores = [];
+      await this.fetchScores();
+      if (!this.isPersonalLeague) await this.fetchPeriodStandings();
     },
-    goToCurrentPeriod() {
+    async goToCurrentPeriod() {
       this.periodOffset = 0;
-      this.fetchScores();
+      this.scores = [];
+      await this.fetchScores();
+      if (!this.isPersonalLeague) await this.fetchPeriodStandings();
+    },
+    async goToPeriod(offset) {
+      if (Number(offset) === this.periodOffset) return;
+      this.periodOffset = Number(offset);
+      this.scores = [];
+      await this.fetchScores();
+      if (!this.isPersonalLeague) await this.fetchPeriodStandings();
     }
   }
 }
@@ -584,6 +659,11 @@ export default {
   flex-wrap: wrap;
   gap: 1rem;
 }
+.current-date {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.9rem;
+  color: #666;
+}
 .invite {
   margin-top: 0.5rem;
 }
@@ -603,17 +683,14 @@ export default {
   border-radius: 6px;
   color: #2d5a3d;
 }
-.yesterday-winners {
-  font-size: 0.9rem;
-  color: #333;
-  margin: 0 0 1rem 0;
-}
 .score-grid-section {
   margin-bottom: 2rem;
   min-width: 0;
 }
 .grid-controls {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
 }
@@ -624,6 +701,9 @@ export default {
   background: white;
   color: #2d5a3d;
   cursor: pointer;
+}
+.btn-nav {
+  min-width: 8rem;
 }
 .btn:hover {
   background: #f0f8f0;
@@ -639,6 +719,20 @@ export default {
 }
 .btn-current:hover {
   background: #1e3d28;
+}
+.period-select {
+  margin-left: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #4a7c59;
+  background: white;
+  color: #2d5a3d;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.period-select:focus {
+  outline: none;
+  border-color: #2d5a3d;
 }
 .error {
   color: #e74;
@@ -727,48 +821,64 @@ export default {
 .empty-cell {
   color: #999;
 }
-.last-month-section {
-  margin-bottom: 2rem;
+/* Standings at top: short leaderboard + last month in corner */
+.standings-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
 }
-.last-month-title {
-  font-size: 1rem;
-  margin: 0 0 0.5rem 0;
+.standings-leaderboard {
+  max-width: 280px;
+  flex-shrink: 0;
+}
+.standings-heading {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.1rem;
   color: #2d5a3d;
 }
-.last-month-box {
-  max-height: 40vh;
-  font-size: 0.75rem;
-}
-.score-grid-compact.score-grid th,
-.score-grid-compact.score-grid td {
-  padding: 0.15rem 0.2rem;
-  font-size: 0.7rem;
-}
-.score-grid-compact .row-label {
-  font-size: 0.7rem;
-}
-.score-grid-compact .date-col {
-  min-width: 32px;
-  font-size: 0.65rem;
-}
-.score-grid-compact .score-cell {
-  min-width: 24px;
-}
-.standings-section {
-  margin-bottom: 2rem;
-}
-.standings-section h2 {
-  margin-bottom: 0.5rem;
-}
-.standings-block h3 {
+.standings-period-label {
+  font-size: 0.8rem;
+  color: #666;
   margin: 0 0 0.5rem 0;
-  font-size: 1rem;
-  color: #2d5a3d;
+}
+.yesterday-standings-corner,
+.last-month-standings-corner {
+  max-width: 180px;
+  padding: 0.5rem 0.75rem;
+  background: #f8f8f8;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+.last-month-heading {
+  margin: 0 0 0.35rem 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #666;
 }
 .standings-list {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
+.standings-list.compact .standing-row {
+  padding: 0.35rem 0.5rem;
+  gap: 0.5rem;
+}
+.standings-list.compact.small {
+  font-size: 0.8rem;
+}
+.standings-list.compact.small .standing-row {
+  padding: 0.25rem 0.35rem;
+  gap: 0.35rem;
+  grid-template-columns: 18px 1fr auto;
+}
+.standings-list.compact.small .standing-row .rank {
+  font-size: 0.8rem;
+}
+.standings-list.compact.small .standing-row .player-points {
+  font-size: 0.8rem;
 }
 .standing-row {
   display: grid;
@@ -799,6 +909,7 @@ export default {
 .no-standings {
   color: #666;
   font-style: italic;
+  font-size: 0.9rem;
 }
 .empty {
   color: #666;

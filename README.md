@@ -34,6 +34,7 @@ A web app for tracking daily puzzle game scores in leagues. Create or join a lea
 - **Standings:** Per-game averages, sorted by score type
 - **Stats:** Your scores over time, filterable by league, game, and date range
 - **Auth:** Sign up / log in via Supabase; session persisted in `localStorage`
+- **Browser extension:** Capture scores from NYT Games (Wordle, Connections, etc.) with one click—see **[extension/README.md](./extension/README.md)** for setup.
 
 ## Deploying
 

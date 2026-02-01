@@ -16,6 +16,7 @@
           <router-link to="/stats" class="nav-item" :class="{ active: $route.path === '/stats' }">
             My Stats
           </router-link>
+          <a href="/#extension-connect" class="nav-item nav-sub">Connect extension</a>
           <button type="button" class="nav-item logout-btn" @click="logout">
             Logout
           </button>

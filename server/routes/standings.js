@@ -40,7 +40,8 @@ module.exports = function (supabase) {
 
   router.get('/:leagueId', async (req, res) => {
     const { leagueId } = req.params;
-    
+    const { from: fromParam, to: toParam } = req.query;
+
     try {
       // Get league info
       const { data: league, error: leagueErr } = await supabase
@@ -74,16 +75,23 @@ module.exports = function (supabase) {
         });
       }
 
-      // Get all scores for users in this league
-      const { data: scores, error: scoresErr } = await supabase
+      // Get all scores for users in this league (optionally filtered by date range)
+      let q = supabase
         .from('scores')
         .select('id, user_id, game_id, date, score')
         .in('user_id', leagueUserIds)
         .order('date', { ascending: true });
-      
+      if (fromParam) q = q.gte('date', fromParam);
+      if (toParam) q = q.lte('date', toParam);
+      const { data: scoresRaw, error: scoresErr } = await q;
       if (scoresErr) {
         return res.status(500).json({ error: scoresErr.message });
       }
+      // Normalize date to YYYY-MM-DD for filtering (Supabase may return ISO string)
+      const scores = (scoresRaw || []).map(s => ({
+        ...s,
+        date: typeof s.date === 'string' && s.date.length >= 10 ? s.date.slice(0, 10) : s.date
+      }));
 
       // Get all league_game rows (with dates) for historical filtering
       const { data: leagueGames } = await supabase

@@ -4,6 +4,21 @@
       <h1 class="page-title">Daily Scores</h1>
       <p class="greeting">Hi, {{ user?.username || user?.email || 'there' }}.</p>
 
+      <!-- Connect browser extension (shown when hash is #extension-connect) -->
+      <section v-if="showExtensionConnect" class="extension-connect-section">
+        <h2 class="extension-connect-title">Connect browser extension</h2>
+        <p class="extension-connect-hint">Link the Geniusness extension so you can send scores from NYT Games with one click.</p>
+        <button
+          type="button"
+          class="extension-connect-btn"
+          :disabled="extensionConnectStatus === 'sending'"
+          @click="sendCredentialsToExtension"
+        >
+          {{ extensionConnectStatus === 'sending' ? 'Sending…' : extensionConnectStatus === 'ok' ? 'Connected ✓' : 'Send credentials to extension' }}
+        </button>
+        <p v-if="extensionConnectError" class="extension-connect-error">{{ extensionConnectError }}</p>
+      </section>
+
       <!-- Starting Wordle Word Display -->
       <div v-if="startingWord && startingWordLeague" class="starting-word-banner">
         <div class="starting-word-content">
@@ -389,7 +404,10 @@ export default {
       reenterForm: { score: '' },
       leagueStandings: {},
       startingWord: null,
-      startingWordLeague: null
+      startingWordLeague: null,
+      extensionConnectStatus: null,
+      extensionConnectError: null,
+      currentHash: ''
     }
   },
   setup() {
@@ -398,6 +416,9 @@ export default {
     return { store, user }
   },
   computed: {
+    showExtensionConnect() {
+      return (this.currentHash || '').replace(/^#/, '') === 'extension-connect'
+    },
     leaguesDisplayedInSidebar() {
       return (this.leagues || []).filter(l => (l.name || '').toLowerCase() !== 'personal')
     },
@@ -438,6 +459,26 @@ export default {
   async created() {
     if (!this.store.user?.id) return
     await this.loadData()
+  },
+  mounted() {
+    this.currentHash = typeof window !== 'undefined' ? window.location.hash : ''
+    this._hashChange = () => {
+      this.currentHash = window.location.hash || ''
+    }
+    this._extensionConnectListener = (event) => {
+      if (event.data && event.data.type === 'GENIUSNESS_EXTENSION_CONNECT_RESPONSE') {
+        this.extensionConnectStatus = event.data.ok ? 'ok' : null
+        this.extensionConnectError = event.data.error || null
+      }
+    }
+    window.addEventListener('hashchange', this._hashChange)
+    window.addEventListener('message', this._extensionConnectListener)
+  },
+  beforeUnmount() {
+    if (this._hashChange) window.removeEventListener('hashchange', this._hashChange)
+    if (this._extensionConnectListener) {
+      window.removeEventListener('message', this._extensionConnectListener)
+    }
   },
   methods: {
     async loadData() {
@@ -677,6 +718,24 @@ export default {
       this.reenteringGame = null
       this.reenterForm = { score: '', entryMode: 'manual', shareText: '' }
     },
+    sendCredentialsToExtension() {
+      this.extensionConnectStatus = 'sending'
+      this.extensionConnectError = null
+      const apiBaseUrl = (import.meta.env.VITE_API_URL || '').trim() || (typeof window !== 'undefined' ? window.location.origin : '')
+      const appOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+      window.postMessage(
+        {
+          type: 'GENIUSNESS_EXTENSION_CONNECT',
+          payload: {
+            apiBaseUrl,
+            appOrigin,
+            userId: this.store.user?.id,
+            accessToken: this.store.accessToken ?? null
+          }
+        },
+        '*'
+      )
+    },
     formatScore(score, slug) {
       const inputType = this.getInputType(slug)
       if (inputType === 'time') {
@@ -859,6 +918,42 @@ export default {
   gap: 0.75rem;
   flex-wrap: wrap;
 }
+.extension-connect-section {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: #f0f8f0;
+  border: 1px solid #4a7c59;
+  border-radius: 8px;
+}
+.extension-connect-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.1rem;
+  color: #2d5a3d;
+}
+.extension-connect-hint {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+  color: #555;
+}
+.extension-connect-btn {
+  padding: 0.5rem 1rem;
+  background: #4a7c59;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.extension-connect-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.extension-connect-error {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.85rem;
+  color: #c62828;
+}
+
 .starting-word-label {
   font-weight: 500;
   font-size: 0.9rem;

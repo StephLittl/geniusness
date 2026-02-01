@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Geniusness Score Capture",
+  "description": "Capture puzzle scores from NYT Games and send them to your Geniusness league.",
+  "version": "1.0.0",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.nytimes.com/*",
+    "http://localhost:*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.nytimes.com/games/*",
+        "https://www.nytimes.com/puzzles/*"
+      ],
+      "js": ["content-nyt-games.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-connect.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

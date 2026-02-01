@@ -21,7 +21,7 @@ module.exports = function (supabase) {
   router.post('/daily', async (req, res) => {
     const { user_id, game_id, date, score } = req.body;
 
-    if (!user_id || !game_id || !date || score == null) {
+    if (!user_id || !game_id || score == null) {
       return res.status(400).json({ error: 'Missing user_id, game_id, date, or score' });
     }
 
@@ -31,7 +31,7 @@ module.exports = function (supabase) {
       return res.status(400).json({ error: 'Score must be a valid number' });
     }
 
-    // Use Eastern date for consistency - ignore client date and use server date
+    // Use Eastern date for consistency (client date ignored; extension may omit date)
     const easternDate = getEasternDate();
 
     // Save score (one per user/game/date, league-agnostic)
