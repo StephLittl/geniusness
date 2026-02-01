@@ -27,6 +27,7 @@
         <div class="standings-overview">
           <div class="overall-standing-card">
             <h3>Overall Standings</h3>
+            <p class="scoring-hint">Lower pts = better. Ties get same rank (e.g. 1,1,3,4). Handicaps applied where configured.</p>
             <div class="standings-list">
               <div
                 v-for="(player, idx) in (leagueStandings[league.leagueid]?.overall || []).slice(0, 5)"
@@ -176,9 +177,14 @@ export default {
   gap: 1.5rem;
 }
 .overall-standing-card h3 {
-  margin: 0 0 0.75rem 0;
+  margin: 0 0 0.25rem 0;
   font-size: 1rem;
   color: #2d5a3d;
+}
+.scoring-hint {
+  font-size: 0.8rem;
+  color: #666;
+  margin: 0 0 0.75rem 0;
 }
 .standings-list {
   display: flex;

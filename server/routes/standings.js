@@ -138,6 +138,42 @@ module.exports = function (supabase) {
         scoresByDate[score.date].push(score);
       }
 
+      // Fetch handicaps for this league (any that might apply to score dates)
+      const scoreDates = Object.keys(scoresByDate);
+      const minDate = scoreDates.length ? scoreDates.sort()[0] : null;
+      const maxDate = scoreDates.length ? scoreDates.sort().reverse()[0] : null;
+      let handicaps = [];
+      if (minDate && maxDate) {
+        const { data: handicapRows } = await supabase
+          .from('league_handicap')
+          .select('*')
+          .eq('league_id', leagueId)
+          .lte('start_date', maxDate)
+          .or(`end_date.is.null,end_date.gte.${minDate}`);
+        handicaps = handicapRows || [];
+      }
+
+      // Day of week from YYYY-MM-DD (0=Sun, 1=Mon, ... 6=Sat)
+      function getDayOfWeek(dateStr) {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Date(y, m - 1, d).getDay();
+      }
+
+      // Get adjusted score for ranking: raw * handicap multiplier for (league, user, game, date)
+      function getAdjustedScore(rawScore, userId, gameId, dateStr) {
+        const dow = String(getDayOfWeek(dateStr));
+        const h = handicaps.find(
+          x =>
+            x.user_id === userId &&
+            x.game_id === gameId &&
+            dateStr >= x.start_date &&
+            (x.end_date == null || dateStr <= x.end_date)
+        );
+        const mult = h?.day_multipliers?.[dow];
+        const multiplier = mult != null ? Number(mult) : 1;
+        return Number(rawScore) * multiplier;
+      }
+
       // For each date, compute game rankings and daily totals
       const dailyTotals = {}; // { date: { userId: totalPoints } }
       const gameStandings = {}; // { gameId: { date: { userId: points } } }
@@ -152,23 +188,25 @@ module.exports = function (supabase) {
           dailyTotals[date][userId] = 0;
         }
 
-        // For each game active on this date, rank players and assign points
+        // For each game active on this date, rank players by adjusted score and assign points
         for (const gameId of gameIdsForDate) {
           const gameScores = dateScores.filter(s => s.game_id === gameId);
           if (gameScores.length === 0) continue;
 
           const game = gameMap[gameId];
           const isLowerBetter = game?.score_type === 'lower_better';
-          
-          // Sort by score (lower is better or higher is better)
+
+          // Sort by adjusted score (handicap applied per day-of-week and date range)
           gameScores.sort((a, b) => {
-            const aScore = Number(a.score);
-            const bScore = Number(b.score);
-            return isLowerBetter ? aScore - bScore : bScore - aScore;
+            const aAdj = getAdjustedScore(a.score, a.user_id, a.game_id, date);
+            const bAdj = getAdjustedScore(b.score, b.user_id, b.game_id, date);
+            return isLowerBetter ? aAdj - bAdj : bAdj - aAdj;
           });
 
-          // Assign points with tie handling
-          const ranked = assignPoints(gameScores, s => Number(s.score));
+          // Assign points with tie handling (using adjusted score for tie-breaking)
+          const ranked = assignPoints(gameScores, s =>
+            getAdjustedScore(s.score, s.user_id, s.game_id, date)
+          );
           
           // Store game standings
           if (!gameStandings[gameId]) {

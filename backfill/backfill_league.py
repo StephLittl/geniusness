@@ -269,6 +269,18 @@ def process_file(path: Path) -> tuple[list[dict], list[tuple[str, str]]]:
                 h = handicaps[date_idx] if date_idx < len(handicaps) else None
                 if h and h > 0:
                     val = val / h
+            # Wordle: spreadsheet has "remaining slots" (0–5) or -1 for fail; store guesses (1–6) or 7 for fail
+            if slug == "wordle":
+                if val == -1:
+                    val = 7  # failed
+                elif 0 <= val <= 5:
+                    val = 6 - int(val)  # remaining 0 → 6 guesses, remaining 5 → 1 guess
+            # Connections: spreadsheet 5=0 mistakes, 4=1, 3=2, 2=3, 1=4, 0=fail; DB stores mistakes (0–4), fail=4
+            if slug == "connections":
+                if val == 0:
+                    val = 4  # fail = 4 mistakes
+                elif 1 <= val <= 5:
+                    val = 5 - int(val)  # 5→0, 4→1, 3→2, 2→3, 1→4 mistakes
             scores.append({
                 "date": date,
                 "game_slug": slug,

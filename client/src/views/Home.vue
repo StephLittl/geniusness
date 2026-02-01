@@ -343,12 +343,12 @@
     <!-- Leagues Sidebar -->
     <aside class="leagues-sidebar">
       <h2>My Leagues</h2>
-      <div v-if="leagues.length === 0" class="empty-sidebar">
+      <div v-if="leaguesDisplayedInSidebar.length === 0" class="empty-sidebar">
         <p>No leagues yet.</p>
         <router-link to="/leagues/create" class="btn-link">Create one</router-link>
       </div>
       <div v-else class="leagues-list-sidebar">
-        <div v-for="league in leagues" :key="league.leagueid" class="league-item-sidebar">
+        <div v-for="league in leaguesDisplayedInSidebar" :key="league.leagueid" class="league-item-sidebar">
           <router-link :to="`/leagues/${league.leagueid}`" class="league-link">
             {{ league.name }}
           </router-link>
@@ -359,6 +359,7 @@
                 {{ getTopPlayer(league.leagueid) }}
               </span>
             </div>
+            <span class="handicap-hint">Standings use ranking pts; handicaps applied where set.</span>
           </div>
         </div>
       </div>
@@ -397,6 +398,9 @@ export default {
     return { store, user }
   },
   computed: {
+    leaguesDisplayedInSidebar() {
+      return (this.leagues || []).filter(l => (l.name || '').toLowerCase() !== 'personal')
+    },
     todayScoresByGame() {
       const map = {}
       if (!this.todayScores || !Array.isArray(this.todayScores)) {
@@ -1444,6 +1448,9 @@ export default {
 }
 .league-standings-preview {
   font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 .overall-preview {
   display: flex;
@@ -1456,6 +1463,11 @@ export default {
 .top-player {
   color: #2d5a3d;
   font-weight: 500;
+}
+.handicap-hint {
+  font-size: 0.75rem;
+  color: #888;
+  font-style: italic;
 }
 .sidebar-actions {
   display: flex;

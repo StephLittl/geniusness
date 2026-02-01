@@ -125,6 +125,8 @@ function logout() {
   margin-left: 220px;
   padding: 2rem;
   min-width: 0;
+  max-width: calc(100vw - 220px); /* don't let content push past viewport */
+  overflow-x: hidden;
 }
 
 .auth-container {
