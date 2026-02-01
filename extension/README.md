@@ -69,22 +69,15 @@ After loading, the extension icon appears in the toolbar. Click it to set the AP
 
 ## Supported games
 
-The extension injects **Send to Geniusness** on these NYT game paths:
+The extension injects **Send to Geniusness** on these sites:
 
-- Wordle  
-- Connections  
-- Strands  
-- Spelling Bee  
-- Letter Boxed  
-- Vertex  
-- Sudoku  
-- Mini Crossword  
-- Crossword  
-- Tiles  
-- Pyramid Scheme  
-- Bracket City  
-- Keyword  
-- Quintumble  
+**NYT (nytimes.com):** Wordle, Connections, Strands, Spelling Bee, Letter Boxed, Vertex, Sudoku, Mini Crossword, Crossword, Tiles  
+
+**Other publishers:**
+- **Bracket City** — [theatlantic.com/games/bracket-city](https://www.theatlantic.com/games/bracket-city/)
+- **Pyramid Scheme** — [buzzfeed.com/pyramid-scheme](https://www.buzzfeed.com/pyramid-scheme)
+- **Keyword** — [washingtonpost.com/games/keyword](https://www.washingtonpost.com/games/keyword/)
+- **Quintumble** — [quintumble.com](https://quintumble.com/#)
 
 Score submission only works for games that your backend supports (via `game_share_parsers` and `/api/share-parser/parse`). Wordle and Connections are supported by default; Pyramid Scheme, Quintumble, and Bracket City have parsers in `migration_add_new_games.sql` if you’ve run that migration.
 

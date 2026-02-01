@@ -7,6 +7,7 @@ import LeagueView from '../views/LeagueView.vue'
 import LeagueJoin from '../views/LeagueJoin.vue'
 import LeagueStart from '../views/LeagueCreate.vue'
 import Stats from '../views/Stats.vue'
+import ConnectExtension from '../views/ConnectExtension.vue'
 import { useUserStore } from '../store/userStore'
 
 const routes = [
@@ -19,7 +20,8 @@ const routes = [
   { path: '/leagues/:id', component: LeagueView, name: 'league-view' },
   { path: '/leagues/join', component: LeagueJoin },
   { path: '/leagues/create', component: LeagueStart },
-  { path: '/stats', component: Stats }
+  { path: '/stats', component: Stats },
+  { path: '/connect-extension', component: ConnectExtension }
 ]
 
 const router = createRouter({
@@ -31,7 +33,7 @@ router.beforeEach((to, from, next) => {
   const store = useUserStore();
   const loggedIn = !!store.user?.id;
 
-  if ((to.path.startsWith('/leagues') || to.path.startsWith('/games') || to.path === '/' || to.path === '/stats') && !loggedIn) {
+  if ((to.path.startsWith('/leagues') || to.path.startsWith('/games') || to.path === '/' || to.path === '/stats' || to.path === '/connect-extension') && !loggedIn) {
     next('/login');
   } else {
     next();

@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   openAppBtn.addEventListener('click', () => {
     const appOrigin = (appInput.value || '').trim().replace(/\/$/, '');
-    const url = appOrigin ? `${appOrigin}/#extension-connect` : null;
+    const url = appOrigin ? `${appOrigin}/connect-extension` : null;
     if (url) chrome.tabs.create({ url });
     else chrome.tabs.create({ url: 'https://www.nytimes.com/games/wordle' });
   });

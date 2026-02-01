@@ -20,7 +20,12 @@
     {
       "matches": [
         "https://www.nytimes.com/games/*",
-        "https://www.nytimes.com/puzzles/*"
+        "https://www.nytimes.com/puzzles/*",
+        "https://www.theatlantic.com/games/*",
+        "https://www.buzzfeed.com/pyramid-scheme*",
+        "https://www.washingtonpost.com/games/*",
+        "https://games.washingtonpost.com/*",
+        "https://quintumble.com/*"
       ],
       "js": ["content-nyt-games.js"],
       "run_at": "document_idle",

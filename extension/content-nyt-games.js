@@ -1,37 +1,53 @@
-// Geniusness – content script on NYT Games pages
+// Geniusness – content script on puzzle game pages (NYT, Atlantic, BuzzFeed, WaPo, Quintumble)
 // Injects "Send to Geniusness" and captures share text (clipboard or DOM).
 
 (function () {
-  // NYT uses /games/... (Wordle, Connections, etc.) and /puzzles/spelling-bee
-  const PATH_PREFIX_TO_SLUG = [
-    ['/games/wordle', 'wordle'],
-    ['/games/connections', 'connections'],
-    ['/games/strands', 'strands'],
-    ['/games/spelling-bee', 'spelling-bee'],
-    ['/puzzles/spelling-bee', 'spelling-bee'],
-    ['/games/letter-boxed', 'letter-boxed'],
-    ['/games/vertex', 'vertex'],
-    ['/games/sudoku', 'sudoku'],
-    ['/games/mini-crossword', 'mini-crossword'],
-    ['/games/crossword', 'crossword'],
-    ['/games/tiles', 'tiles'],
-    ['/games/pyramid-scheme', 'pyramid-scheme'],
-    ['/games/bracket-city', 'bracket-city'],
-    ['/games/keyword', 'keyword'],
-    ['/games/quintumble', 'quintumble'],
+  // Each entry: { pathPrefix, slug } for NYT, or { host, pathPrefix, slug } for other sites.
+  // host is matched as hostname === host || hostname.endsWith('.' + host)
+  const GAME_PAGES = [
+    // NYT (path-only; script only runs on nytimes.com)
+    { pathPrefix: '/games/wordle', slug: 'wordle' },
+    { pathPrefix: '/games/connections', slug: 'connections' },
+    { pathPrefix: '/games/strands', slug: 'strands' },
+    { pathPrefix: '/games/spelling-bee', slug: 'spelling-bee' },
+    { pathPrefix: '/puzzles/spelling-bee', slug: 'spelling-bee' },
+    { pathPrefix: '/games/letter-boxed', slug: 'letter-boxed' },
+    { pathPrefix: '/games/vertex', slug: 'vertex' },
+    { pathPrefix: '/games/sudoku', slug: 'sudoku' },
+    { pathPrefix: '/games/mini-crossword', slug: 'mini-crossword' },
+    { pathPrefix: '/games/crossword', slug: 'crossword' },
+    { pathPrefix: '/games/tiles', slug: 'tiles' },
+    // Other publishers
+    { host: 'theatlantic.com', pathPrefix: '/games/bracket-city', slug: 'bracket-city' },
+    { host: 'buzzfeed.com', pathPrefix: '/pyramid-scheme', slug: 'pyramid-scheme' },
+    { host: 'washingtonpost.com', pathPrefix: '/games/keyword', slug: 'keyword' },
+    { host: 'washingtonpost.com', pathPrefix: '/games', slug: 'keyword', pathContains: 'keyword' },
+    { host: 'games.washingtonpost.com', pathPrefix: '/keyword', slug: 'keyword' },
+    { host: 'games.washingtonpost.com', pathPrefix: '/games/keyword', slug: 'keyword' },
+    { host: 'quintumble.com', pathPrefix: '/', slug: 'quintumble' },
   ];
 
   function getGameSlug() {
-    // Use top frame URL so we detect the game even when script runs inside an iframe
+    let hostname = '';
     let pathname = '';
     try {
-      pathname = window.top && window.top.location ? window.top.location.pathname : window.location.pathname;
+      const loc = window.top && window.top.location ? window.top.location : window.location;
+      hostname = loc.hostname || '';
+      pathname = loc.pathname || '';
     } catch (_) {
+      hostname = window.location.hostname || '';
       pathname = window.location.pathname || '';
     }
     const path = (pathname || '').replace(/\/$/, '') || '/';
-    for (const [prefix, slug] of PATH_PREFIX_TO_SLUG) {
-      if (path === prefix || path.startsWith(prefix + '/')) return slug;
+    for (const entry of GAME_PAGES) {
+      let pathMatch = path === entry.pathPrefix || (entry.pathPrefix !== '/' && path.startsWith(entry.pathPrefix + '/'));
+      if (entry.pathContains) pathMatch = pathMatch && path.indexOf(entry.pathContains) !== -1;
+      if (entry.host) {
+        const hostMatch = hostname === entry.host || hostname.endsWith('.' + entry.host);
+        if (hostMatch && pathMatch) return entry.slug;
+      } else {
+        if (pathMatch) return entry.slug;
+      }
     }
     return null;
   }
@@ -77,6 +93,36 @@
           if (text && looksLikeShareText(text)) return text.trim();
         }
       } catch (_) {}
+    }
+    return null;
+  }
+
+  // Keyword (Washington Post): no share output; scrape time (seconds) and errors from page. Score = time + errors*10.
+  function tryGetKeywordFromDOM() {
+    const text = (document.body && document.body.innerText) || '';
+    // Prefer "Time: X" so we get the full number (e.g. 12 not 2)
+    let time = null;
+    const timeLabel = text.match(/time[:\s]+(\d+)/i);
+    if (timeLabel && timeLabel[1]) time = parseInt(timeLabel[1], 10);
+    if (time == null) {
+      // Match all "X seconds" / "X sec" and take the largest (avoids "2" from "12" split across DOM)
+      const secMatches = text.matchAll(/(\d+)\s*seconds?/gi);
+      for (const m of secMatches) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n < 3600 && (time == null || n > time)) time = n;
+      }
+    }
+    if (time == null) {
+      const secMatches = text.matchAll(/(\d+)\s*sec\b/gi);
+      for (const m of secMatches) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n < 3600 && (time == null || n > time)) time = n;
+      }
+    }
+    const errMatch = text.match(/(\d+)\s*errors?/i) || text.match(/(\d+)\s*wrong/i) || text.match(/(\d+)\s*mistakes?/i) || text.match(/errors?[:\s]+(\d+)/i);
+    const errors = errMatch && errMatch[1] ? parseInt(errMatch[1], 10) : null;
+    if (time != null && !isNaN(time) && errors != null && !isNaN(errors) && time >= 0 && time < 3600 && errors >= 0 && errors < 20) {
+      return 'Time: ' + time + ', Errors: ' + errors;
     }
     return null;
   }
@@ -128,14 +174,23 @@
         }
       } catch (_) {}
       if (!shareText) shareText = tryGetShareFromDOM();
+      // Keyword has no share output; try to grab time + errors from the page
+      if (!shareText && slug === 'keyword') shareText = tryGetKeywordFromDOM();
       if (!shareText) {
         const paste = window.prompt(
-          "Paste your puzzle share text here (or click Share on the game first, then try again):"
+          slug === 'keyword'
+            ? 'Paste "Time: X, Errors: Y" (e.g. Time: 11, Errors: 1) or we\'ll try to read it from the page after you click OK.'
+            : 'Paste your puzzle share text here (or click Share on the game first, then try again):'
         );
-        if (paste && looksLikeShareText(paste)) shareText = paste;
+        const keywordMatch = slug === 'keyword' && paste && (/Time:\s*\d+.*Errors:\s*\d+/i.test(paste) || /^\d+\s*,\s*\d+$/.test(paste.trim()));
+        const otherMatch = slug !== 'keyword' && paste && looksLikeShareText(paste);
+        if (keywordMatch || otherMatch) shareText = paste;
       }
+      if (!shareText && slug === 'keyword') shareText = tryGetKeywordFromDOM();
       if (!shareText) {
-        alert("Couldn't get share text. Click Share on the game first to copy results, then click Send to Geniusness again.");
+        alert(slug === 'keyword'
+          ? 'Couldn\'t find time and errors on the page. Make sure you\'ve finished the game, then try again. Or paste "Time: 11, Errors: 1" (your numbers).'
+          : "Couldn't get share text. Click Share on the game first to copy results, then click Send to Geniusness again.");
         return;
       }
       btn.disabled = true;
@@ -161,7 +216,12 @@
       } catch (e) {
         btn.textContent = 'Send to Geniusness';
         btn.disabled = false;
-        alert('Extension error: ' + (e.message || 'Check that you are connected in the extension popup.'));
+        const msg = (e && e.message) || '';
+        if (msg.includes('Extension context invalidated')) {
+          alert('The extension was reloaded or updated. Please refresh this page (F5 or reload) and try again.');
+        } else {
+          alert('Extension error: ' + (msg || 'Check that you are connected in the extension popup.'));
+        }
       }
     });
 
