@@ -1,6 +1,18 @@
 const express = require('express');
 
 function parseShareString(shareText, parser, gameSlug) {
+  // Wordle: score = number of guesses (1-6). Try "Wordle N M/6" then "M/6" so we get M even when emoji grid is missing.
+  if (gameSlug === 'wordle' && shareText && typeof shareText === 'string') {
+    let guesses = null;
+    const wordleLine = shareText.match(/Wordle\s+\d+\s+(\d)\s*\/\s*6/i);
+    if (wordleLine && wordleLine[1]) guesses = parseInt(wordleLine[1], 10);
+    if (guesses == null) {
+      const m6 = shareText.match(/(\d)\s*\/\s*6/);
+      if (m6 && m6[1]) guesses = parseInt(m6[1], 10);
+    }
+    if (guesses != null && guesses >= 1 && guesses <= 6) return guesses;
+  }
+
   // Keyword: no share output; score = time (seconds) + errors * 10. Accept "Time: X, Errors: Y" or "X,Y"
   if (gameSlug === 'keyword' && shareText && typeof shareText === 'string') {
     const timeErr = shareText.match(/Time:\s*(\d+)\s*,\s*Errors:\s*(\d+)/i) ||
@@ -48,7 +60,14 @@ function parseShareString(shareText, parser, gameSlug) {
           // Count lines that contain emoji squares (⬜🟨🟩)
           return /[⬜🟨🟩]/.test(trimmed);
         });
-        return lines.length;
+        const m6 = shareText.match(/(\d)\s*\/\s*6/);
+        // If we have emoji lines, use that count; otherwise try "M/6" from header (extension may send header only)
+        if (lines.length > 0) return lines.length;
+        if (m6 && m6[1]) {
+          const g = parseInt(m6[1], 10);
+          if (g >= 1 && g <= 6) return g;
+        }
+        return 0;
       }
       
       // Special handling for Pyramid Scheme: extract time (BuzzFeed / NYT-style share text)
@@ -198,8 +217,7 @@ module.exports = function (supabase) {
       
       let score = null;
       
-      // Keyword can be parsed without a parser row (no share output; extension sends "Time: X, Errors: Y")
-      if (gameSlug === 'keyword') {
+      if (gameSlug === 'wordle' || gameSlug === 'keyword') {
         score = parseShareString(shareText, parser, gameSlug);
       }
       if ((score === null || isNaN(score)) && !parserRes.error && parser) {
@@ -210,7 +228,19 @@ module.exports = function (supabase) {
       if (score === null || isNaN(score)) {
         const numbers = shareText.match(/\d+(?:\.\d+)?/g);
         if (numbers && numbers.length > 0) {
-          score = parseFloat(numbers[0]);
+          // Wordle: score is 1-6 (guesses). Prefer a number that looks like "X/6"
+          if (gameSlug === 'wordle') {
+            const sixIdx = numbers.indexOf('6');
+            if (sixIdx > 0) {
+              const g = parseInt(numbers[sixIdx - 1], 10);
+              if (g >= 1 && g <= 6) score = g;
+            }
+            if ((score === null || isNaN(score)) && numbers.length > 0) {
+              const inRange = numbers.map((n) => parseInt(n, 10)).filter((n) => n >= 1 && n <= 6);
+              if (inRange.length > 0) score = inRange[0];
+            }
+          }
+          if (score === null || isNaN(score)) score = parseFloat(numbers[0]);
           // Pyramid Scheme: "0:23" gives numbers [0, 23] — use 23 (seconds), not 0
           if (gameSlug === 'pyramid-scheme' && score === 0 && numbers.length >= 2) {
             const sec = parseFloat(numbers[1]);
